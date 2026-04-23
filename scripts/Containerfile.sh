@@ -16,15 +16,14 @@ case "$APP_NAME" in
     ;;
 esac
 
-## Use our PQ Go compiler image to build.
-echo 'FROM oci.messier42.com/go:1.25.9-pq1 AS builder'
+echo 'FROM docker.io/golang:1-alpine AS builder'
 
 echo 'RUN apk add --no-cache ca-certificates git'
 echo 'ARG TARGETOS'
 echo 'ARG TARGETARCH'
 
 echo 'WORKDIR /work'
-echo 'COPY --from=cabe-go . ./cabe-go/'
+#echo 'COPY --from=cabe-go . ./cabe-go/'
 echo 'WORKDIR /work/khaled'
 echo 'ENV GOCACHE=/go/pkg/.go-build/'
 

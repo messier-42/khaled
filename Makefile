@@ -47,17 +47,10 @@ OUT_DIR ?= $(BUILD_DIR)/out
 BIN_DIR ?= $(OUT_DIR)/bin
 OCI_DIR ?= $(OUT_DIR)/oci
 DIST_DIR ?= $(OUT_DIR)/dist
-CHART_DIR ?= $(OUT_DIR)/charts
 INT_DIR ?= $(BUILD_DIR)/int
 LINT_REPORTS_DIR ?= $(BUILD_DIR)/lint-reports
 DIST_TREE_DIR ?= $(INT_DIR)/dist-tree
 
-CHART_SRC_DIR ?= chart/khaled
-
-# CABE_GO_DIR points at the sibling cabe-go module checkout. Khaled's
-# go.mod has `replace github.com/messier-42/cabe-go => ../cabe-go`,
-# and the OCI builds (khaled and cabetool) both need to copy that
-# checkout into their build context. Override if your layout differs.
 CABE_GO_DIR ?= ../cabe-go
 
 KHALED_VERSION ?= $(shell if [[ -z "$$TARGET_VERSION" ]]; then k="$$(git describe --tags --exact-match 2>/dev/null || true)"; else k="$$TARGET_VERSION"; fi; if [[ $$k =~ ^v[0-9].*$$ ]]; then echo "$$k"; else echo v0.0.0; fi)
@@ -70,7 +63,7 @@ endif
 INFO=@echo -e "\t$(1)\t$(2)"
 
 .PHONY: all
-all: oci-images $(BIN_DIR)/sterile-khaled chart ## Build everything
+all: oci-images $(BIN_DIR)/sterile-khaled ## Build everything
 
 .PHONY: clean
 clean: ## Remove build artifacts
@@ -109,25 +102,9 @@ $(BIN_DIR)/sterile-khaled: $(OCI_DIR)/khaled.oci
 	$(Q)CID=$$("$(CONTAINER_TOOL)" create "$(call LAST_BUILD_TAG,khaled)") && \
 	  $(CONTAINER_TOOL) cp "$$CID:/khaled" "$@"; $(CONTAINER_TOOL) rm "$$CID"; chmod +x "$@"
 
-# `make chart` lints and packages the khaled Helm chart. The packaged
-# .tgz lands in $(CHART_DIR) for upload as a CI artifact and for use
-# by the kutest harness (Stage 2).
-.PHONY: chart
-chart: ## Lint and package the khaled Helm chart
-	$(Q)mkdir -p "$(CHART_DIR)"
-	$(call INFO,HELM-LINT,$(CHART_SRC_DIR))
-	$(Q)$(HELM) lint "$(CHART_SRC_DIR)"
-	$(call INFO,HELM-PACK,$(CHART_DIR))
-	$(Q)$(HELM) package "$(CHART_SRC_DIR)" -d "$(CHART_DIR)"
-
 
 ##@ Testing (for development)
 
-# `make run` target: launches khaled against doc/dev-config.yaml via
-# `go run`, so every invocation reflects the current working tree
-# without producing a persistent binary artifact. Override
-# KHALED_CONFIG to point at a different config file, or KHALED_ARGS
-# to pass additional flags (e.g. --log-severity info).
 KHALED_CONFIG ?= doc/dev-config.yaml
 KHALED_ARGS   ?=
 
@@ -148,23 +125,10 @@ utest-khaled:
 	echo "=== Running $$n tests..."; \
 	go test -race -count=1 ./...
 
-# `make integration`: in-process integration tests that drive a real
-# khaled instance via the cabe-go ckapclient. Behind the "integration"
-# build tag so `go test ./...` (and `make utest`) skip them — they
-# pull in real plugin stacks and are slower than unit tests.
 integration: ## Run in-process integration tests
 	$(Q)echo "=== Running integration tests..."; \
 	go test -race -count=1 -tags=integration ./test/...
 
-# `make kutest`: kind-based multi-process integration tests. Requires
-# kind, helm, and kubectl on $PATH. Builds khaled.oci, builds
-# cabetool.oci from cabe-go source, packages chart/khaled, then runs
-# the kutest harness which spins up a fresh kind cluster, installs
-# SPIRE + khaled + cabetool, and runs Features.
-#
-# Override KUTEST_TARGET_TYPE=external to skip cluster creation and
-# target an existing kubeconfig context. Set KUTEST_BAIL_AND_KEEP=1
-# to leave the cluster up after a test failure for kubectl debugging.
 .PHONY: kutest cabetool-oci kutest-oci-rebuild
 $(OCI_DIR)/cabetool.oci:
 	$(Q)mkdir -p "$(OCI_DIR)"
@@ -177,12 +141,6 @@ $(OCI_DIR)/cabetool.oci:
 	$(Q)mv "$@.tmp" "$@"
 cabetool-oci: $(OCI_DIR)/cabetool.oci ## Build cabetool OCI archive (from $(CABE_GO_DIR))
 
-# kutest-oci-rebuild forces a fresh OCI rebuild for both khaled and
-# cabetool. The base OCI rules (above) only fire when the .oci file is
-# missing — that's fine for `make all` but wrong for kutest, which
-# must reflect the *current* source tree on every run (otherwise an
-# integration test against a week-old binary green-lights wholly
-# broken code).
 kutest-oci-rebuild:
 	$(Q)rm -f "$(OCI_DIR)/khaled.oci" "$(OCI_DIR)/cabetool.oci"
 	$(Q)$(MAKE) -s "$(OCI_DIR)/khaled.oci" "$(OCI_DIR)/cabetool.oci"

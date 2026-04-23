@@ -1,0 +1,38 @@
+---
+title: Architecture
+description: khaled's plugin-based architecture.
+sidebar:
+  order: 2
+---
+
+## Plugin types
+
+khaled is organized around plugins. There are seven types of plugins that
+khaled defines within its architecture:
+
+- **Config source plugins.** A config source plugin determine from where and
+  how khaled loads its configuration. khaled is designed to be able to reload
+  configuration live whenever it is changed without restarting.
+
+- **Key storage.** A key storage plugin determines how khaled stores and
+  accesses cryptographic keys.
+
+- **Policy engine.** A policy engine plugin determines how khaled makes
+  authorization decisions according to a configured policy obtained from a
+  policy source.
+
+- **Policy source.** A policy source plugin determines from where and how
+  khaled obtains a policy to be passed to a policy engine for evaluation.
+
+- **Client authentication.** A client authentication plugin determines how
+  clients are authenticated to ascertain their identity.
+
+- **Claims mapper.** A claims mapper plugin determines how an ascertained
+  client identity is mapped to a Principal comprising a set of claims.
+
+- **Protocol transport.** A protocol transport plugin determines how the CKAP
+  protocol is transported over the network.
+
+## Current plugins
+
+See [Plugins](/plugins/).

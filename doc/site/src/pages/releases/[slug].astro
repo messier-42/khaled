@@ -1,0 +1,36 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { getCollection, getEntry, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const releases = await getCollection('releases');
+  return releases.map(r => ({ params: { slug: r.data.tag_name } }));
+}
+
+const { slug } = Astro.params;
+const release = await getEntry('releases', slug);
+
+let notFound = false;
+if (!release) {
+  notFound = true;
+  Astro.response.status = 404;
+}
+
+const { Content } = await render(release);
+---
+
+<StarlightPage frontmatter={{ title: `Release ` + release.data.tag_name }}>
+  {notFound ? (<div>
+    <p>Release not found.</p>
+  </div>) : (<>
+
+  <p>Tag <strong>{release.data.tag_name}</strong> released <strong><time datetime={release.data.published_at}>{new Date(release.data.published_at).toISOString().slice(0,10)}</time></strong></p>
+
+  <p><a href={"/"+release.data.tag_name+"/"}>View documentation for this release</a></p>
+
+  <article>
+    <Content />
+  </article>
+
+  </>)}
+</StarlightPage>

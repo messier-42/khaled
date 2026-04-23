@@ -1,0 +1,70 @@
+---
+title: Current Plugins
+description: khaled's current in-tree plugins.
+sidebar:
+  order: 3
+---
+
+For details on the supported plugin types, see [Architecture](/overview/arch/).
+
+## Current plugins
+
+The following plugins are currently maintained in-tree:
+
+### Config Source Plugins
+
+- **Config Source: `disk`.** This config source plugin obtains a YAML, JSON or
+  CBOR configuration file from a filesystem directory. It is reloaded automatically
+  on changes.
+
+- **Config Source: `k8s`.** This config source plugin obtains a YAML, JSON or
+  CBOR configuration file from a Kubernetes ConfigMap. It is reloaded automatically
+  on changes.
+
+### Key Storage
+
+- **Key Storage: `disk`.** This key storage plugin persists Root Keys on disk using
+  an SQLite3 database.
+
+Future storage backends might include `tpm` (TPM v2.0) and `kms` (AWS KMS).
+
+### Policy Engine
+
+- **Policy Engine: `cedar`.** This policy engine plugin evaluates Cedar policies
+  to make authorization decisions.
+
+### Policy Source
+
+- **Policy Source: `disk`.** This policy source plugin loads policy source code
+  files from disk and reloads them automatically when changed.
+
+- **Policy Source: `inline`.** This policy source plugin allows policy source code
+  (e.g. Cedar code) to be inlined in the khaled configuration file as obtained from
+  a config source.
+
+### Client Authentication
+
+- **Client Authentication: `tls-spiffe`.** This client authentication plugin ascertains
+  a client identity using X.509 client certificates obtained via SPIFFE.
+
+- **Client Authentication: `tls-ca`.** This client authentication plugin ascertains
+  a client identity using non-SPIFFE X.509 client certificates issued by a
+  pre-existing PKI.
+
+### Claims Mapper
+
+- **Claims Mapper: `static`.** The `static` claims mapper can derive a Principal's claims
+  using a statically configured set of regular expressions and string templates configured
+  within the khaled configuration.
+
+- **Claims Mapper: `k8s-attestation`.** The `k8s-attestation` claims mapper can derive a
+  Principal's claims using attestation calls made to the Kubernetes API when running inside
+  a Kubernetes environment. It is designed for use in conjunction with the `tls-spiffe`
+  client authentication plugin and cannot currently be used with any other client authentication
+  plugin.
+
+## Protocol Transport
+
+- **Protocol Transport: `http`.** The `http` transport transports CKAP over
+  HTTPS. It is currently
+  the only protocol transport plugin.

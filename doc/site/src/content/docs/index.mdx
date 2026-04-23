@@ -1,0 +1,60 @@
+---
+title: khaled
+description: A reference implementation of a CABE Key Server.
+template: splash
+hero:
+  tagline: A pluggable reference implementation of a CABE Key Server.
+  actions:
+    - text: What is khaled?
+      link: /overview/what-is/
+      icon: right-arrow
+    - text: About CABE
+      link: https://cabespec.org/
+      variant: minimal
+      icon: external
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+**khaled** is the reference implementation of a key server within the [CABE
+Architecture](https://cabespec.org/). It distributes cryptographic keys to
+authorized clients according to a centrally managed policy, to facilitate
+managed encryption and decryption of arbitrary objects according to the
+principles of Attribute-Based Access Control (ABAC).
+
+<CardGrid>
+  <Card title="Pluggable" icon="puzzle">
+    khaled features seven plugin types including client authentication,
+    principal claims mapping, policy sourcing, policy evaluation, and
+    protocol transport, making it customizable to any operational environment
+    or need.
+  </Card>
+  <Card title="CABE-compliant" icon="document">
+    khaled serves as a centerpiece of a CABE deployment, enabling clients
+    to encapsulate and de-encapsulate information using <a href="https://cabespec.org/">CABE</a>.
+  </Card>
+  <Card title="SPIFFE and Kubernetes-aware" icon="seti:kubernetes">
+    khaled is able to authenticate clients using X.509-SVIDs in a SPIFFE-enabled Kubernetes or
+    non-Kubernetes SPIFFE infrastructure environment, and can perform Kubernetes-aware attestation
+    to gate access to keys based on policy expressed over Kubernetes pod metadata such as labels,
+    attributes, or container images.
+  </Card>
+  <Card title="Cedar-based ABAC policy" icon="approve-check">
+    Write arbitrary programmatic policy in the AWS-proven Cedar policy language
+    to enforce arbitrary attribute-based access control requirements, or swap out the
+    Cedar plugin for an alternative of your choice.
+  </Card>
+</CardGrid>
+
+## Start here
+
+<CardGrid>
+  <LinkCard title="What is khaled?" href="/overview/what-is/"
+    description="khaled's role in the CABE ecosystem."/>
+  <LinkCard title="Architecture" href="/overview/arch/"
+    description="khaled's plugin-based architecture."/>
+  <LinkCard title="Key Schedule" href="/overview/key-schedule/"
+    description="How khaled manages the key schedule."/>
+  {/*<LinkCard title="Deployment Guide" href="/guides/deployment/"
+    description="How to deploy khaled and establish a CABE domain."/>*/}
+</CardGrid>

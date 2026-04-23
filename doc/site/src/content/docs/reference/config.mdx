@@ -1,0 +1,268 @@
+---
+title: Configuration Reference
+description: khaled's configuration.
+sidebar:
+  order: 10
+---
+
+## Overview
+
+khaled supports multiple [Config Source Plugins](/plugins/) which provide the
+lion's share of khaled configuration data. khaled supports live update of the
+configuration it is using at runtime; when the configured config source reports
+a change, each subsystem adopts the new configuration.
+
+Some subsystems have restrictions on what can be changed after startup.
+
+A small number of configuration items are specified as command line flags or
+environment variables in order to bootstrap the desired Config Source Plugin.
+All other configuration settings are set in the Config Object.
+
+The Config Object is a CBOR map data item following the schema set out herein.
+No specific physical representation is mandated, as that is left to the Config
+Source Plugin in use. It is typically transported as a YAML file on disk or
+inside a Kubernetes ConfigMap, but these are details left to the specific
+Config Source Plugin in use, and other serializations or methods of expressing
+the conceptual schema below could be implemented by alternative Config Source
+Plugins.
+
+## Daemon Invocation
+
+### Command line flags
+
+The following command line flags are supported:
+
+- `--help`
+- `--config-source=NAME`: Use the config source plugin named `NAME` (e.g.
+  `disk`, `k8s`).  Defaults to `disk`.
+- `--config=PATH`: Used by the `disk` config source only. Path to a file
+  containing YAML or CBOR data. Defaults to `/etc/khaled/khaled.yaml`.
+- `--k8s-config=SPEC`: Used by the `k8s` config source only. `SPEC` should
+  be in the form `configmap/<NAME>`.
+- `--k8s-namespace=NAMESPACE`: Used by the `k8s` config source only.
+  `NAMESPACE` is the Kubernetes namespace to load the config from.
+
+The following command line flags specify logger configuration settings to use
+during the bootstrapping phase of logging, which occurs before the chosen
+config source plugin is initialized and has an opportunity to provide a logging
+configuration.  These flags also specify the logger configuration to be used as
+a default if the config source plugin in use does not specify a specific
+logging configuration.
+
+- `--log-format={text|json}`: Specifies the log output format to use.
+- `--log-severity={debug|info|warn|error}`: Specifies the log output severity
+  to use.
+
+### Environment variables
+
+Each environment variable specifies a default value for the equivalent flag
+above. Flags take precedence.
+
+- `KHALED_CONFIG_SOURCE`
+- `KHALED_CONFIG`
+- `KHALED_K8S_CONFIG`
+- `KHALED_K8S_NAMESPACE`
+- `KHALED_LOG_FORMAT`
+- `KHALED_LOG_SEVERITY`
+
+### Daemon sub-commands
+
+The primary mode of invocation of khaled is to run it without a sub-command, in
+which case it launches as a daemon. However, the following sub-commands are
+also available:
+
+#### `config-schema`
+
+Running `khaled config-schema` causes khaled to output a JSON Schema object and
+exit.  The schema describes the schema which a configuration object must
+conform to. In other words, it outputs the schema used by a YAML configuration
+file as consumed by the `disk` config source plugin.
+
+Using the output of this sub-command is preferable as it reflects all
+dynamically registered plugins built in to the khaled binary, as plugins can
+add their own aspects to the overall khaled config object schema.
+
+## Configuration object schema
+
+The following example reflects the configuration settings supported by khaled
+itself and the plugins it ships in-tree.
+
+Most top-level configuration blocks in a khaled config object are named after a
+plugin kind, and take a `use:` item beneath them specifying the plugin name to
+use. Each plugin name then has a sub-block under that key named after it in
+which configuration settings specific to that plugin can be placed.
+
+```yaml
+# keyStorage specifies configuration for the chosen key storage plugin.
+keyStorage:
+  # Required. String. Speciifes the name of the key storage
+  # plugin to use.
+  use: disk
+
+  # Optional. String. Name of the CABE domain the key server serves.
+  # Must be a valid DNS name. The default value is "default".
+  domainName: "default"
+
+  # Required for the 'disk' key storage plugin.
+  disk:
+    # Required. String. Specifies the path to a directory in which keys
+    # can be stored. The directory must exist and be writeable.
+    path: /var/lib/khaled/
+
+# policyEngine specifies configuration for the chosen policy
+# engine plugin.
+policyEngine:
+  # String. Specifies the policy engine plugin to use. Default: "cedar".
+  use: cedar
+
+# policySource specifies configuration for the chosen policy
+# source plugin.
+policySource:
+  # Required. String. Specifies the policy source plugin to use.
+  use: file
+
+  # Required for the 'file' policy source plugin.
+  file:
+    # Required. String. Path to a file containing policy source code
+    # (e.g. Cedar text). The path is watched for changes and reloaded
+    # automatically.
+    path: /etc/khaled/khaled.cedar
+
+  # Required for the 'inline' policy source plugin.
+  inline:
+    # Required. String. Specifies policy source code for the chosen policy
+    # engine directly.
+    text: |
+      ... inline policy source code ...
+
+# clientAuthn specifies configuration for the chosen client
+# authentication plugin.
+clientAuthn:
+  # Required. String. Specifies the client authn plugin to use.
+  use: tls-spiffe
+
+  # Optional. May be used to specify config values when using the
+  # 'anonymous' client authn plugin.
+  anonymous:
+    # Required. String. Speicifes the identity URI to emit for every
+    # request.
+    uri: "https://cabespec.org/anonymous"
+
+  # Optional. The 'tls-spiffe' client authn plugin has no settings.
+  tls-spiffe: {}
+
+  # Required for the 'tls-ca' client authn plugin.
+  tls-ca:
+    # Required. String. Specifies the filesystem path to a PEM file
+    # containing one or more trust anchors to use to authenticate
+    # any client certificate presented by a client. This is not currently
+    # reloaded after server launch.
+    caBundlePath: "/etc/ssl/client-bundle.pem"
+
+# claimsMapping speifies configuration for the chosen claims
+# mapper plugin.
+claimsMapping:
+  # Required. String. Specifies the claims mapper plugin to use.
+  use: static
+
+  # Required for the 'static' claims mapper plugin.
+  static:
+    principals:
+      - # Required. String. Go regular expression matched against the
+        # authenticated client identity URI produced by the client
+        # authn plugin in use. The pattern is matched against the entire
+        # string automatically (there is no need for `^`/`$`).
+        # Named captures such as `(?P<name>...)` are exposed to claim
+        # templates via `.URIMatch.<name>`.
+        uri: "spiffe://cabespec.org/country=(?P<country>[A-Z]{2})/firstName=(?P<firstName>[a-zA-Z]+)"
+
+        # Required. Map of claim names (string keys) to claim values. Go
+        # text/template-style templates may be used to format the claim values.
+        # The following template context variables are available:
+        #
+        #   .URIMatch
+        #     `map[string]string` of named captures from the URI 
+        #     regular expression match.
+        #
+        #   .Identity.URI
+        #     `string`. The client's authenticated identity URI as
+        #     ascertained by the client authn plugin in use.
+        claims:
+          clientIdentityURI: "{{.Identity.URI}}"
+          country: "{{.URIMatch.country}}"
+          firstName: "{{.URIMatch.firstName}}"
+
+  # Required for the 'k8s-attestation' claims mapper plugin.
+  k8s-attestation:
+    cache:
+      # Optional. String. Specifies how long a successful attestation
+      # is cached for. This is a duration value (e.g. "30s").
+      ttl: str
+
+      # Optional. String. Specifies how long a failed attestation
+      # is cached for. This is a duration value (e.g. "30s").
+      negativeTTL: string
+
+      # Optional. Integer. Specifies the maximum number of cached
+      # entries.
+      maxEntries: int
+
+# Optional. Specifies configuration values used for the SPIFFE Workload
+# API. These configuration values are consumed by any plugin that needs
+# access to the SPIFFE Workload API (e.g. the tls-spiffe authn plugin
+# and any listener with serverCertificate.source=spiffe).
+spiffe:
+  # Optional. String. Filesystem path to the SPIFFE Workload API socket.
+  # If empty, defaults to the environment variable
+  # $SPIFFE_ENDPOINT_SOCKET, then a platform-specific well-known path.
+  workloadSocketPath: "/var/run/workload.sock"
+
+# Optional. Logger configuration. If specified, these values take over
+# from the bootstrapping logger settings specified at launch as soon
+# as the config is first loaded.
+logging:
+  # Required. String. Log output format; either "text" or "json".
+  format: "text"
+
+  # Required. String. Log output severity; one of "debug", "info",
+  # "warn" or "error".
+  severity: "debug"
+
+# Required. Listener configuration. It is mandatory to specify at least
+# one listener.
+listeners:
+  - # Required. String. The name of the transport plugin to use
+    # for the listener.
+    use: http
+
+    # Required. String. The IP address and port to bind to.
+    address: "0.0.0.0:8443"
+
+    # Required when using the 'http' transport plugin for this listener.
+    http:
+      tls:
+        serverCertificate:
+          # Required. String. Specifies the source to obtain a TLS server
+          # certificate from; can be either 'spiffe' or 'file'. Both support
+          # automatically reloading upon changes; the 'file' source uses
+          # a filesystem watcher to facilitate this.
+          source: spiffe
+
+          # Required when source=file. Strings specifying the paths to files
+          # containing a certificate chain and a private key file respectively.
+          certificateFilePath: ...
+          keyFilePath: ...
+
+          # Optional; used only for source=file. Specifies the path to a PEM
+          # file containing one or more trust anchors to use to verify
+          # client certificates. If unspecified, verification is left
+          # to the configured client authn plugin. This file is not currently
+          # reloaded after server launch.
+          clientTrustAnchorsPath: ...
+
+        # Optional. String. Specifies a filesystem path to an NSS key log file.
+        # If specified, TLS key log entries are appended to this file.
+        #
+        # DO NOT SPECIFY THIS SETTING IN PRODUCTION.
+        keylog: "/tmp/key.log"
+```

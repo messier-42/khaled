@@ -1,0 +1,50 @@
+---
+title: Key Schedule
+description: khaled's key schedule design.
+sidebar:
+  order: 5
+---
+
+## `disk` Key Storage Plugin
+
+The current `disk` key storage plugin uses an embedded SQLite3 database and
+implements the Single Temporal Root Key (STRK) architecture suggested by
+[CKAP](Https://cabespec.org/spec/ckap/).
+
+The `path` configuration setting specifies a directory to hold the database.
+The following files are manifested at the specified path:
+
+- `{path}/khaled-key-store.db`: SQLite3 database file for root key persistence.
+
+### Schema
+
+The key store stores the following kinds of object:
+
+- **Domain.** A CABE domain has a name string and a stable unique ID.
+
+- **Root key.** A CABE domain contains a sequence of Root Keys. Each root key
+  within a domain has an integral sequence number beginning at 0, so that a
+  domain contains root keys with sequence numbers 0, 1, 2, ..., n, where `n` is
+  the sequence number of the current (that is, the newest) root key within a
+  domain.
+
+  A domain always has a root key with a sequence number of 0, the sequence numbers
+  of the root keys within a domain are always contiguous, no two root keys within
+  a domain can have the same sequence number, and a root key within a domain is never
+  deleted once created. A root key is considered retired when it is no longer the
+  most recent root key within a domain.
+
+  Besides a stable unique ID and a sequence number, a root key has a creation
+  timestamp, a retirement timestamp (if it has been retired), and the
+  cryptographic key image itself.
+
+- **Key series.** Mostly, a Key Series (as defined in [CABE
+  Architecture](https://cabespec.org/spec/arch/) is derived as needed and does not
+  need to have information about it persisted on disk. However, subepoch rollover
+  does require temporary persistence of the advanced subepoch number until the
+  root key is rotated and a new root key is created for the domain in question.
+  When this happens, this data is deleted as it is no longer needed.
+
+  This table stores a set of (attribute set, subepoch number) mappings for a
+  given domain. The time at which the subepoch number was most recently
+  advanced is also stored.

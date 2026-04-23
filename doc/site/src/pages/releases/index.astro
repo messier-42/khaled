@@ -1,0 +1,16 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { getCollection} from 'astro:content';
+
+const releases = await getCollection('releases');
+---
+
+<StarlightPage frontmatter={{ title: 'Releases' }}>
+  <p>This page provides information on khaled releases.</p>
+
+  {releases.map(r => <div>
+    <h2><a href={`/releases/`+r.data.tag_name+`/`}>{r.data.tag_name}</a></h2>
+    <p><time datetime={r.data.published_at}>{new Date(r.data.published_at).toISOString().slice(0,10)}</time></p>
+  </div>)}
+
+</StarlightPage>

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+if [[ -z "$1" ]]; then
+  echo >&2 "usage: $0 <output-filename.tar.gz>"
+  exit 1
+fi
+
+SELF_DIR="$(dirname "$0")"
+
+CLEANUP_CONTAINERS=()
+function cleanup {
+  local id
+  for id in "${CLEANUP_CONTAINERS[@]}"; do
+  echo cleaning $id
+    podman rm "$id" || true
+  done
+}
+trap cleanup EXIT
+
+## Build the static documentation into an empty OCI image which just contains
+## static HTML files in the root of the image and nothing else. Can be used to
+## distribute the docs ORAS-style.
+function build_image {
+  local target_image_id="$1"
+  local prefix_name="$2"
+  local docs_mode="$3"
+
+  release_info_path="$SELF_DIR/../../../build/release-info/"
+  [[ ! -e "$release_info_path" ]] && release_info_path="$(mktemp -d)"
+  release_info_arg="--build-context=release-info=$release_info_path"
+
+  cat <<END | podman build -f /dev/stdin "$SELF_DIR/.." "$release_info_arg" --tag "$target_image_id"
+FROM alpine:latest AS base
+RUN apk add nodejs npm wget python3
+WORKDIR /app
+ENV NODE_ENV=production
+
+FROM base AS build
+COPY . .
+
+COPY --from=release-info . ./release-info/
+ENV RELEASE_INFO=./release-info/
+
+RUN --mount=type=cache,target=/app/node_modules npm install
+RUN --mount=type=cache,target=/app/node_modules npm run build
+
+## Unfortunately Astro/Starlight has poor/nonexistent support for generating
+## documentation intended to be read locally (i.e., under file://). It turns
+## out the easiest thing to actually do here is just use wget's crawl and URL
+## rewriting support. We spin up a web server and crawl everything to
+## files.
+RUN \
+  if [[ "$docs_mode" == online ]]; then \
+    mkdir -p /out; mv dist /out/localhost:8000; \
+  else \
+    python3 -m http.server -d dist </dev/null & sleep 1; \
+    mkdir -p /out; cd /out; \
+    wget -r --no-parent -t0 --retry-connrefused \
+      --mirror --convert-links --adjust-extension --page-requisites \
+      http://localhost:8000/ || true; \
+  fi
+
+FROM scratch
+COPY --from=build /out/localhost:8000 /${prefix_name}
+END
+}
+
+## Unfortunately podman has a command to export a container as a flat filesystem,
+## but not an image, so we have to create (but not start) a container to get our
+## tarball.
+function export_image_as_flat_tar {
+  local image_id="$1" output_path="$2" container_id
+
+  # Requires podman v5 due to bug with handling images with empty entrypoints
+  container_id="$(podman create "$image_id")"
+  CLEANUP_CONTAINERS+=("$container_id")
+  podman export "$container_id" | gzip > "$output_path.tmp"
+  mv "$output_path.tmp" "$output_path"
+}
+
+PREFIX_NAME=khaled-docs
+[[ -n "$2" ]] && PREFIX_NAME="$2"
+[[ -n "$3" ]] && DOCS_MODE="$3"
+
+case "$DOCS_MODE" in
+  online|offline)
+    true
+    ;;
+  *)
+    DOCS_MODE=offline
+    ;;
+esac
+
+build_image khaled-docs:tmp "$PREFIX_NAME" "$DOCS_MODE"
+export_image_as_flat_tar khaled-docs:tmp "$1"

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+## Script used for triggering release automation for khaled.
+set -eo pipefail
+
+[[ -z "${GH}" ]] && GH=gh
+if ! command -v "${GH}" &>/dev/null; then
+  echo "$0: "'The GitHub CLI (gh(1)) tool must be available in $PATH or at $GH to use this tool.'
+  exit 1
+fi
+
+[[ -z "${JQ}" ]] && JQ=jq
+if ! command -v "${JQ}" &>/dev/null; then
+  echo "$0: "'The jq(1) tool must be available in $PATH or at $JQ to use this tool.'
+  exit 1
+fi
+
+USER_JSON="$("${GH}" api user 2>/dev/null || true)"
+if [[ -z "${USER_JSON}" ]]; then
+  echo "$0: The GitHub CLI (gh(1)) is not logged into GitHub. Try 'gh auth'."
+  exit 1
+fi
+
+
+cat <<END
+This tool triggers the release automation for khaled. It should be used once a
+specific branch/ref contains the exact final tree for a given release.
+
+You will need answers to the following questions:
+
+  TARGET_VERSION -- Desired Version (e.g. v1.2.3, v1.2.3a1, v1.2.3b5, v1.2.3rc4)
+  SOURCE_REF     -- Source Branch Name/Ref
+  RELEASE_TYPE   -- Release Type (LIVE or RELENG_TEST)
+
+END
+
+while ((1)); do
+  if [[ "${TARGET_VERSION}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)((a|b|rc)[1-9][0-9]*)?$ ]]; then
+    break
+  fi
+  read -rp 'Target Version (e.g. v1.2.3rc4): ' TARGET_VERSION
+done
+
+while ((1)); do
+  SOURCE_REF_HASH="$(git rev-parse --verify "${SOURCE_REF}" 2>/dev/null || true)"
+  if [[ -n "${SOURCE_REF_HASH}" ]]; then
+    break
+  fi
+  read -rp 'Source Ref (e.g. foobranch, 136d3d8c, HEAD): ' SOURCE_REF
+done
+
+while ((1)); do
+  if [[ "${RELEASE_TYPE}" =~ (LIVE|RELENG_TEST) ]]; then
+    break
+  fi
+  read -rp 'Release Type (LIVE or RELENG_TEST): ' RELEASE_TYPE
+done
+
+echo "Releasing ${TARGET_VERSION} from ${SOURCE_REF_HASH} (${RELEASE_TYPE})"
+echo
+echo "Performing preflight checks."
+PREFLIGHT_CI_JSON="$("${GH}" run list -c "${SOURCE_REF_HASH}" -e push -w build.yml --json status,conclusion,event,number,url)"
+if [[ "$(echo "${PREFLIGHT_CI_JSON}" | "${JQ}" length)" != 1 ]]; then
+  echo >&2 "$0: expected single run for the given source ref, got:"
+  echo "${PREFLIGHT_CI_JSON}" | "${JQ}"
+  exit 1
+fi
+
+PREFLIGHT_CI_URL="$(echo "${PREFLIGHT_CI_JSON}" | jq -r '.[0].url')"
+PREFLIGHT_CI_STATUS="$(echo "${PREFLIGHT_CI_JSON}" | jq -r '.[0].status')"
+PREFLIGHT_CI_CONCLUSION="$(echo "${PREFLIGHT_CI_JSON}" | jq -r '.[0].conclusion')"
+PREFLIGHT_CI_EVENT="$(echo "${PREFLIGHT_CI_JSON}" | jq -r '.[0].event')"
+
+if [[ "${PREFLIGHT_CI_EVENT}" != "push" ]]; then
+  echo >&2 "$0: expected run to be triggered by 'push' event, got:"
+  echo "${PREFLIGHT_CI_JSON}" | jq
+  exit 1
+fi
+
+if [[ "${PREFLIGHT_CI_STATUS}/${PREFLIGHT_CI_CONCLUSION}" != "completed/success" ]]; then
+  echo >&2 "$0: the CI run for the source ref (${SOURCE_REF}) must have completed successfully, but got:"
+  echo "${PREFLIGHT_CI_JSON}" | jq
+  echo
+fi
+
+cat <<END
+
+=== IMPORTANT ===
+
+You are about to trigger the following release:
+
+  Target Version:       ${TARGET_VERSION}
+  Source Ref Hash:      ${SOURCE_REF_HASH} (${SOURCE_REF})
+  Release Type:         ${RELEASE_TYPE}
+
+  Source Ref CI Run:
+    URL:                ${PREFLIGHT_CI_URL}
+    Status:             ${PREFLIGHT_CI_STATUS}/${PREFLIGHT_CI_CONCLUSION}
+
+
+END
+read -rsp 'Press ENTER to continue (LAST CHANCE TO BACK OUT).' x
+echo; echo
+
+## The GitHub Workflow Dispatch API unfortunately does not allow direct commit
+## hashes, so we have to create a temporary tag.
+GITHUB_REPO="$("${GH}" repo view --json nameWithOwner -q .nameWithOwner)"
+REMOTE_ORIGIN="git@github.com:${GITHUB_REPO}.git"
+
+git tag temporary_release_tag_"${SOURCE_REF_HASH}" "${SOURCE_REF_HASH}"
+git push "${REMOTE_ORIGIN}" temporary_release_tag_"${SOURCE_REF_HASH}"
+git tag -d temporary_release_tag_"${SOURCE_REF_HASH}"
+
+"${GH}" workflow run build.yml \
+  -r "temporary_release_tag_${SOURCE_REF_HASH}" \
+  -f target_version="${TARGET_VERSION}" \
+  -f release_type="${RELEASE_TYPE}"
+
+echo; echo; echo "Release initiated."

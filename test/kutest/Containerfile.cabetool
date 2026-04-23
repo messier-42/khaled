@@ -1,26 +1,6 @@
-# Containerfile for cabetool — used only by the kutest k8s
-# integration harness. We build from cabe-go source so the image is
-# always in lockstep with the in-tree cabetool changes; production
-# users who just want the binary should `go install
-# github.com/messier-42/cabe-go/cmd/cabetool` instead.
-#
-# Build context is expected to be the cabe-go module root (the
-# Makefile target supplies it via `podman build -f` at module
-# resolution time).
-#
-# Base image is busybox (not distroless) on purpose: the harness
-# starts the cabetool pod with `command: ["sleep", "infinity"]` and
-# drives cabetool via `kubectl exec`, so the container needs a shell
-# and basic coreutils. Cabetool is a test-only client, not a
-# production-shipped artefact.
-
-FROM oci.messier42.com/go:1.25.9-pq1 AS builder
+FROM docker.io/golang:1-alpine AS builder
 WORKDIR /src
 COPY . .
-# Single RUN keeps `go mod download` and `go build` in the same
-# layer state. Splitting them across two RUN steps with a cache
-# mount has tripped over GOMODCACHE-vs-cache-mount path mismatches
-# in this base image.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -trimpath -o /cabetool ./cmd/cabetool
 

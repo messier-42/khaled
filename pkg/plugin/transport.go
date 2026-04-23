@@ -140,6 +140,7 @@ func acquireCertSource(ctx context.Context, cfg x509source.Config, sharedSPIFFE 
 // http transport itself does not close its CertSource.
 type httpTransport struct {
 	*httpt.Transport
+
 	ownedCert x509source.Source
 }
 

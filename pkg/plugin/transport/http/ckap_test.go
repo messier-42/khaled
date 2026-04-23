@@ -6,6 +6,7 @@ import (
 	"io"
 	stdhttp "net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -455,7 +456,7 @@ func TestCKAP_Retrograde_Denied(t *testing.T) {
 	if e.Kind != ckapraw.KindError || e.ErrorCode != int(cabe.CodePolicyDenied) {
 		t.Fatalf("error shape: %+v", e)
 	}
-	if bytes.Contains([]byte(e.Summary), []byte("revoked")) {
+	if strings.Contains(e.Summary, "revoked") {
 		t.Fatalf("summary leaks policy Reason: %q", e.Summary)
 	}
 }
@@ -551,7 +552,7 @@ func TestCKAP_AssistedEncapsulate_Denied(t *testing.T) {
 	if e.Kind != ckapraw.KindError || e.ErrorCode != int(cabe.CodePolicyDenied) {
 		t.Fatalf("error shape: %+v", e)
 	}
-	if bytes.Contains([]byte(e.Summary), []byte("revoked")) {
+	if strings.Contains(e.Summary, "revoked") {
 		t.Fatalf("summary leaks policy Reason: %q", e.Summary)
 	}
 }
@@ -598,7 +599,7 @@ func TestCKAP_AssistedDecapsulate_Denied(t *testing.T) {
 	if e.Kind != ckapraw.KindError || e.ErrorCode != int(cabe.CodePolicyDenied) {
 		t.Fatalf("error shape: %+v", e)
 	}
-	if bytes.Contains([]byte(e.Summary), []byte("revoked")) {
+	if strings.Contains(e.Summary, "revoked") {
 		t.Fatalf("summary leaks policy Reason: %q", e.Summary)
 	}
 }
@@ -933,9 +934,7 @@ func TestCKAP_KeyserverHotSwap(t *testing.T) {
 	// flagged. The swapper exits when `stop` is closed.
 	stop := make(chan struct{})
 	var swapperDone sync.WaitGroup
-	swapperDone.Add(1)
-	go func() {
-		defer swapperDone.Done()
+	swapperDone.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -948,7 +947,7 @@ func TestCKAP_KeyserverHotSwap(t *testing.T) {
 				holder.v.Store(srvA)
 			}
 		}
-	}()
+	})
 
 	clientWG.Wait()
 	close(stop)

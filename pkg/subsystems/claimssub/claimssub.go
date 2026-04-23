@@ -64,7 +64,7 @@ func NewEmpty() *Manager {
 func spec() lifecycle.Spec[claimsmapping.ClaimsMapper] {
 	return lifecycle.Spec[claimsmapping.ClaimsMapper]{
 		Name: "claimsmapper",
-		Apply: func(_ context.Context, old claimsmapping.ClaimsMapper, oldSnap, newSnap config.Snapshot) (claimsmapping.ClaimsMapper, error) {
+		Apply: func(ctx context.Context, old claimsmapping.ClaimsMapper, oldSnap, newSnap config.Snapshot) (claimsmapping.ClaimsMapper, error) {
 			newArgs, err := argsFromSnapshot(newSnap)
 			if err != nil {
 				return nil, err
@@ -78,7 +78,7 @@ func spec() lifecycle.Spec[claimsmapping.ClaimsMapper] {
 					return old, nil
 				}
 			}
-			return buildClaimsMapper(newArgs)
+			return buildClaimsMapper(ctx, newArgs)
 		},
 		Close: func(m claimsmapping.ClaimsMapper) error { return m.Close() },
 	}
@@ -159,11 +159,11 @@ func argsFromSnapshot(snap config.Snapshot) (argsData, error) {
 	return args, nil
 }
 
-func buildClaimsMapper(args argsData) (claimsmapping.ClaimsMapper, error) {
+func buildClaimsMapper(ctx context.Context, args argsData) (claimsmapping.ClaimsMapper, error) {
 	pluginArgs := plugin.ClaimsMapperArgs{PluginName: args.PluginName}
 	pluginArgs.Static.Principals = args.StaticPrincipals
 	pluginArgs.K8sAttestation = args.K8sCache
-	return plugin.NewClaimsMapper(pluginArgs)
+	return plugin.NewClaimsMapper(ctx, pluginArgs)
 }
 
 // asInt coerces an already-Normalize'd config value into an int.

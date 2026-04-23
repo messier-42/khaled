@@ -75,7 +75,7 @@ jobs:
 
       - name: Package sterile binary archive
         run: |
-          mkdir -p build/out/khaled-linux-amd64
+          mkdir -p build/out/{dist,khaled-linux-amd64}
           cp -a build/out/bin/sterile-khaled build/out/khaled-linux-amd64/khaled
           tar -C build/out -czf "$(pwd)/build/out/dist/khaled-linux-amd64.tgz" ./khaled-linux-amd64/
 
@@ -91,13 +91,6 @@ jobs:
         with:
           name: dist-archives
           path: build/out/dist/*.tgz
-          if-no-files-found: error
-
-      - name: Upload Helm chart as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: helm-chart
-          path: build/out/charts/*.tgz
           if-no-files-found: error
 
       - name: Podman Cache Fix

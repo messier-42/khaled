@@ -77,8 +77,8 @@ var clientAuthnFactory = func() *Factory[AuthenticatorArgs, clientauthn.Authenti
 // NewAuthenticator instantiates an Authenticator given the specified
 // arguments. Returns an error for an unknown plugin name or a
 // plugin-specific construction failure.
-func NewAuthenticator(args AuthenticatorArgs) (clientauthn.Authenticator, error) {
-	return clientAuthnFactory.Build(context.Background(), args.PluginName, args)
+func NewAuthenticator(ctx context.Context, args AuthenticatorArgs) (clientauthn.Authenticator, error) {
+	return clientAuthnFactory.Build(ctx, args.PluginName, args)
 }
 
 // RegisterClientAuthnSchemas contributes every client authentication

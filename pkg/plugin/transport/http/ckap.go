@@ -59,7 +59,8 @@ func registerCKAPHandlers(mux *stdhttp.ServeMux, getKeyServerFunc func() *keyser
 		handleRequireMethod(mux, stdhttp.MethodPost, path, h)
 	}
 
-	// TODO: Implement ARIN.
+	// ARIN endpoints are not yet implemented; stub responders return a
+	// CodeUnsupported CKAP error.
 	handleRequireMethod(mux, stdhttp.MethodGet, "/ckap/ARINToken", stdhttp.HandlerFunc(arinUnsupported))
 	handleRequireMethod(mux, stdhttp.MethodGet, "/ckap/ARIN", stdhttp.HandlerFunc(arinUnsupported))
 }
@@ -429,7 +430,7 @@ func httpStatusForCode(c cabe.Code) int {
 		return stdhttp.StatusRequestEntityTooLarge
 	case cabe.CodeUnsupported:
 		return stdhttp.StatusNotImplemented
-	case cabe.CodeInternal:
+	case cabe.CodeReserved, cabe.CodeInternal:
 		return stdhttp.StatusInternalServerError
 	default:
 		return stdhttp.StatusInternalServerError

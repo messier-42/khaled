@@ -749,9 +749,7 @@ func TestFileSourceGetCertificateConcurrent(t *testing.T) {
 	}
 
 	var writerWG sync.WaitGroup
-	writerWG.Add(1)
-	go func() {
-		defer writerWG.Done()
+	writerWG.Go(func() {
 		for range rewriteIter {
 			writeSelfSigned(t, certPath, keyPath, rotatedCN)
 			// Drain any update notifications so the buffered
@@ -761,7 +759,7 @@ func TestFileSourceGetCertificateConcurrent(t *testing.T) {
 			case <-time.After(500 * time.Millisecond):
 			}
 		}
-	}()
+	})
 
 	readerWG.Wait()
 	close(stop)

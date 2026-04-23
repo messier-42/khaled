@@ -5,6 +5,7 @@ package disk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -128,6 +129,10 @@ func (s *Source) isRelevantEvent(event fsnotify.Event) bool {
 func (s *Source) reload(notify bool) {
 	snapshot, err := loadFile(s.path)
 
+	if notify && errors.Is(err, errEmptyConfigFile) {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -167,12 +172,14 @@ func (s *Source) sendUpdate(err error) {
 // was chosen to match the Kubernetes ConfigMap limit.
 const maxConfigFileSize = 1 << 20
 
+var errEmptyConfigFile = errors.New("config file is empty")
+
 func loadFile(path string) (config.Snapshot, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return config.Snapshot{}, fmt.Errorf("cannot open config file %q: %w", path, err)
 	}
-	defer f.Close()
+	defer f.Close() // best effort
 
 	data, err := io.ReadAll(io.LimitReader(f, maxConfigFileSize+1))
 	if err != nil {
@@ -180,6 +187,9 @@ func loadFile(path string) (config.Snapshot, error) {
 	}
 	if len(data) > maxConfigFileSize {
 		return config.Snapshot{}, fmt.Errorf("config file %q exceeds max size of %d bytes", path, maxConfigFileSize)
+	}
+	if len(data) == 0 {
+		return config.Snapshot{}, errEmptyConfigFile
 	}
 
 	if looksLikeCBOR(data) {

@@ -376,6 +376,7 @@ func (s *safeWriter) Write(p []byte) (int, error) {
 // fails. Counts calls so a test can wait for the loop to tick.
 type erroringDomain struct {
 	stubDomain
+
 	err   error
 	calls atomic.Int64
 }

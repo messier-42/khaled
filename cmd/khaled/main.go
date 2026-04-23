@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	// Default configuration source if nothing else is specified
+	// Default configuration source if nothing else is specified.
 	defaultConfigSource = "disk"
 	defaultConfigPath   = "/etc/khaled/khaled.yaml"
 
-	// Environment variables
+	// Environment variables.
 	envConfigSource = "KHALED_CONFIG_SOURCE"
 	envConfigPath   = "KHALED_CONFIG"
 	envK8sConfig    = "KHALED_K8S_CONFIG"

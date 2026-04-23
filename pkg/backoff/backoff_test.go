@@ -13,14 +13,14 @@ func TestWaitAdvancesAndCapsAtMax(t *testing.T) {
 		Jitter:  0,
 	}.New()
 
-	want := []time.Duration{2, 4, 8, 8, 8}
+	want := []int{2, 4, 8, 8, 8}
 	for i, w := range want {
 		if !b.Wait(context.Background()) {
 			t.Fatalf("iter %d: Wait returned false unexpectedly", i)
 		}
-		w *= time.Millisecond
-		if got := b.Current(); got != w {
-			t.Errorf("iter %d: Current = %v, want %v", i, got, w)
+		wantDur := time.Duration(w) * time.Millisecond
+		if got := b.Current(); got != wantDur {
+			t.Errorf("iter %d: Current = %v, want %v", i, got, wantDur)
 		}
 	}
 }

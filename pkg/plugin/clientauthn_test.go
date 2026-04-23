@@ -1,6 +1,7 @@
 package plugin_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -20,14 +21,14 @@ import (
 )
 
 func TestNewAuthenticatorRejectsUnknown(t *testing.T) {
-	_, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{PluginName: "bogus"})
+	_, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{PluginName: "bogus"})
 	if err == nil {
 		t.Fatalf("expected unknown plugin name to fail")
 	}
 }
 
 func TestNewAuthenticatorRejectsTLSSpiffeWithoutBundles(t *testing.T) {
-	_, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{
+	_, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{
 		PluginName: "tls-spiffe",
 		Bundles:    nil,
 	})
@@ -40,7 +41,7 @@ func TestNewAuthenticatorBuildsTLSSpiffe(t *testing.T) {
 	td := spiffeid.RequireTrustDomainFromString("example.org")
 	bundles := x509bundle.New(td)
 
-	auth, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{
+	auth, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{
 		PluginName: "tls-spiffe",
 		Bundles:    bundles,
 	})
@@ -53,7 +54,7 @@ func TestNewAuthenticatorBuildsTLSSpiffe(t *testing.T) {
 }
 
 func TestNewAuthenticatorBuildsAnonymous(t *testing.T) {
-	auth, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{
+	auth, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{
 		PluginName: "anonymous",
 		Anonymous:  plugin.AnonymousArgs{URI: "https://example.test/anon"},
 	})
@@ -66,7 +67,7 @@ func TestNewAuthenticatorBuildsAnonymous(t *testing.T) {
 }
 
 func TestNewAuthenticatorBuildsAnonymousWithDefaultURI(t *testing.T) {
-	auth, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{
+	auth, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{
 		PluginName: "anonymous",
 	})
 	if err != nil {
@@ -78,7 +79,7 @@ func TestNewAuthenticatorBuildsAnonymousWithDefaultURI(t *testing.T) {
 }
 
 func TestNewAuthenticatorBuildsTLSCA(t *testing.T) {
-	auth, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{
+	auth, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{
 		PluginName: "tls-ca",
 		TLSCA:      plugin.TLSCAArgs{CABundlePath: writeOneShotCAPEM(t)},
 	})
@@ -91,7 +92,7 @@ func TestNewAuthenticatorBuildsTLSCA(t *testing.T) {
 }
 
 func TestNewAuthenticatorRejectsTLSCAWithoutBundlePath(t *testing.T) {
-	_, err := plugin.NewAuthenticator(plugin.AuthenticatorArgs{
+	_, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{
 		PluginName: "tls-ca",
 	})
 	if err == nil {

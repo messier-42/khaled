@@ -61,7 +61,7 @@ type Store struct {
 	lockFD int
 
 	// now is the time source used for timestamps written to the database.
-	// This is usually time.Now but can be overriden in tests.
+	// This is usually time.Now but can be overridden in tests.
 	now func() time.Time
 
 	mu      sync.Mutex

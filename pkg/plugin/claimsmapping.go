@@ -43,8 +43,8 @@ var claimsMappingFactory = func() *Factory[ClaimsMapperArgs, claimsmapping.Claim
 
 // NewClaimsMapper instantiates a ClaimsMapper given the specified
 // arguments.
-func NewClaimsMapper(args ClaimsMapperArgs) (claimsmapping.ClaimsMapper, error) {
-	return claimsMappingFactory.Build(context.Background(), args.PluginName, args)
+func NewClaimsMapper(ctx context.Context, args ClaimsMapperArgs) (claimsmapping.ClaimsMapper, error) {
+	return claimsMappingFactory.Build(ctx, args.PluginName, args)
 }
 
 // RegisterClaimsMappingSchemas contributes every claims mapping plugin's

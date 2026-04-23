@@ -53,7 +53,7 @@ func NewEmpty() *Manager {
 func spec(spiffe x509source.Source) lifecycle.Spec[clientauthn.Authenticator] {
 	return lifecycle.Spec[clientauthn.Authenticator]{
 		Name: "authenticator",
-		Apply: func(_ context.Context, old clientauthn.Authenticator, oldSnap, newSnap config.Snapshot) (clientauthn.Authenticator, error) {
+		Apply: func(ctx context.Context, old clientauthn.Authenticator, oldSnap, newSnap config.Snapshot) (clientauthn.Authenticator, error) {
 			newArgs := argsFromSnapshot(newSnap)
 			if newArgs.PluginName == "" {
 				return nil, nil
@@ -61,7 +61,7 @@ func spec(spiffe x509source.Source) lifecycle.Spec[clientauthn.Authenticator] {
 			if old != nil && argsFromSnapshot(oldSnap) == newArgs {
 				return old, nil
 			}
-			return buildAuthenticator(newArgs, spiffe)
+			return buildAuthenticator(ctx, newArgs, spiffe)
 		},
 		Close: func(a clientauthn.Authenticator) error { return a.Close() },
 	}
@@ -91,7 +91,7 @@ func argsFromSnapshot(snap config.Snapshot) argsData {
 
 const pluginNameTLSSpiffe = "tls-spiffe"
 
-func buildAuthenticator(args argsData, spiffe x509source.Source) (clientauthn.Authenticator, error) {
+func buildAuthenticator(ctx context.Context, args argsData, spiffe x509source.Source) (clientauthn.Authenticator, error) {
 	pluginArgs := plugin.AuthenticatorArgs{PluginName: args.PluginName}
 	switch args.PluginName {
 	case pluginNameTLSSpiffe:
@@ -108,5 +108,5 @@ func buildAuthenticator(args argsData, spiffe x509source.Source) (clientauthn.Au
 	case "tls-ca":
 		pluginArgs.TLSCA.CABundlePath = args.TLSCACABundlePath
 	}
-	return plugin.NewAuthenticator(pluginArgs)
+	return plugin.NewAuthenticator(ctx, pluginArgs)
 }

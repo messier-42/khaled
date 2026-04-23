@@ -30,7 +30,7 @@ func TestBuildProducesObjectSchemaWithPluginKindVariants(t *testing.T) {
 		Type:     "object",
 		Required: []string{"path"},
 		Properties: map[string]*jsonschema.Schema{
-			"path": {Type: "string", MinLength: intPtr(1)},
+			"path": {Type: "string", MinLength: new(1)},
 		},
 	})
 	if err != nil {
@@ -63,7 +63,7 @@ func TestValidateAcceptsWellFormedConfig(t *testing.T) {
 		Type:     "object",
 		Required: []string{"path"},
 		Properties: map[string]*jsonschema.Schema{
-			"path": {Type: "string", MinLength: intPtr(1)},
+			"path": {Type: "string", MinLength: new(1)},
 		},
 	})
 
@@ -252,7 +252,7 @@ func TestBuildSchemaDeterministic(t *testing.T) {
 		if err != nil {
 			t.Fatalf("build: %v", err)
 		}
-		out, err := json.Marshal(built)
+		out, err := json.Marshal(built.Schema())
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
 		}
@@ -365,13 +365,13 @@ func TestRegisterPluginKindCommon(t *testing.T) {
 		Type:     "object",
 		Required: []string{"path"},
 		Properties: map[string]*jsonschema.Schema{
-			"path": {Type: "string", MinLength: intPtr(1)},
+			"path": {Type: "string", MinLength: new(1)},
 		},
 	}); err != nil {
 		t.Fatalf("register disk: %v", err)
 	}
 	if err := r.RegisterPluginKindCommon("keyStorage", "leaseDuration", &jsonschema.Schema{
-		Type: "string", MinLength: intPtr(1),
+		Type: "string", MinLength: new(1),
 	}); err != nil {
 		t.Fatalf("register common: %v", err)
 	}
@@ -414,5 +414,3 @@ func TestRegisterPluginKindCommonRejectsVariantCollision(t *testing.T) {
 		t.Fatal("expected error for variant collision")
 	}
 }
-
-func intPtr(i int) *int { return &i }

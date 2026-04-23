@@ -418,7 +418,6 @@ func TestDecide_Concurrent(t *testing.T) {
 
 	done := make(chan error, racers)
 	for i := range racers {
-		i := i
 		go func() {
 			for range rounds {
 				// Alternate the principal so each racer sees a
@@ -441,7 +440,7 @@ func TestDecide_Concurrent(t *testing.T) {
 					return
 				}
 				if d.Allow != useGood {
-					done <- errUnexpectedVerdict{allow: d.Allow, want: useGood}
+					done <- unexpectedVerdictError{allow: d.Allow, want: useGood}
 					return
 				}
 				dreq := policyengine.DecapsulateRequest{
@@ -456,7 +455,7 @@ func TestDecide_Concurrent(t *testing.T) {
 					return
 				}
 				if d.Allow != useGood {
-					done <- errUnexpectedVerdict{allow: d.Allow, want: useGood}
+					done <- unexpectedVerdictError{allow: d.Allow, want: useGood}
 					return
 				}
 			}
@@ -470,11 +469,11 @@ func TestDecide_Concurrent(t *testing.T) {
 	}
 }
 
-type errUnexpectedVerdict struct {
+type unexpectedVerdictError struct {
 	allow bool
 	want  bool
 }
 
-func (e errUnexpectedVerdict) Error() string {
+func (e unexpectedVerdictError) Error() string {
 	return "unexpected verdict"
 }

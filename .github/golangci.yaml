@@ -91,7 +91,7 @@ linters:
   exclusions:
     rules:
       - linters: [errcheck]
-        source: "(defer\\s.*|\\.Body)\\.Close\\(\\).*//\\s*best effort($|:\\s)"
+        source: "\\.Close\\(\\).*//\\s*best effort($|:\\s)"
       - linters: [misspell]
         source: ".*mosquitto.*"
       - linters: [nilerr]

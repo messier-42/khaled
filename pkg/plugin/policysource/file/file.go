@@ -87,7 +87,7 @@ func New(ctx context.Context, path string, compile policysource.CompileFunc) (*S
 	return s, nil
 }
 
-// Current returns the current Engine or the error that occured during the
+// Current returns the current Engine or the error that occurred during the
 // initial load attempt. Once a (re)load has succeeded at least once, the
 // last good Engine is retained and Current returns it.
 func (s *Source) Current() (policyengine.Engine, error) {

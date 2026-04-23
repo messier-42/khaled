@@ -32,8 +32,8 @@ import (
 	"github.com/messier-42/khaled/pkg/x509source"
 )
 
-// The default amount of time to wait for in-flight requests to complete during
-// shutdown.
+// DefaultGracefulShutdownDuration is the default amount of time to wait
+// for in-flight requests to complete during shutdown.
 const DefaultGracefulShutdownDuration = 1 * time.Second
 
 // Config is the resolved configuration for a single CABE HTTP transport
@@ -86,11 +86,10 @@ type Transport struct {
 	// mu guards all of the below plus cfg.KeyLog (which Close nils to
 	// signal ownership transfer). All other fields above are immutable
 	// after construction.
-	mu            sync.Mutex
-	server        *stdhttp.Server
-	listenerTaken bool
-	closed        bool
-	closeOnce     sync.Once
+	mu        sync.Mutex
+	server    *stdhttp.Server
+	closed    bool
+	closeOnce sync.Once
 }
 
 var _ transport.Transport = &Transport{}

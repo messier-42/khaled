@@ -246,9 +246,9 @@ func TestMapCachesSuccess(t *testing.T) {
 	pod := testPod("prod", "pod-a", "uid-1", "app", "node-7", "img", nil, nil)
 	client := fake.NewSimpleClientset(pod)
 
-	var gets int64
+	var gets atomic.Int64
 	client.PrependReactor("get", "pods", func(_ kubetesting.Action) (bool, runtime.Object, error) {
-		atomic.AddInt64(&gets, 1)
+		gets.Add(1)
 		return false, nil, nil // fall through to default handler
 	})
 
@@ -261,7 +261,7 @@ func TestMapCachesSuccess(t *testing.T) {
 			t.Fatalf("map #%d: %v", i, err)
 		}
 	}
-	if got := atomic.LoadInt64(&gets); got != 1 {
+	if got := gets.Load(); got != 1 {
 		t.Errorf("api GETs = %d, want 1 (cache should absorb the rest)", got)
 	}
 }
@@ -269,9 +269,9 @@ func TestMapCachesSuccess(t *testing.T) {
 func TestMapNegativeCachesFailure(t *testing.T) {
 	client := fake.NewSimpleClientset() // no pods
 
-	var gets int64
+	var gets atomic.Int64
 	client.PrependReactor("get", "pods", func(_ kubetesting.Action) (bool, runtime.Object, error) {
-		atomic.AddInt64(&gets, 1)
+		gets.Add(1)
 		return false, nil, nil
 	})
 
@@ -284,7 +284,7 @@ func TestMapNegativeCachesFailure(t *testing.T) {
 			t.Fatalf("map #%d: err = %v", i, err)
 		}
 	}
-	if got := atomic.LoadInt64(&gets); got != 1 {
+	if got := gets.Load(); got != 1 {
 		t.Errorf("api GETs = %d, want 1 (negative cache should absorb the rest)", got)
 	}
 }
@@ -295,12 +295,12 @@ func TestMapNegativeCachesFailure(t *testing.T) {
 // the full NegativeTTL.
 func TestMapDoesNotCacheTransientErrors(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	var gets int64
+	var gets atomic.Int64
 	var failed atomic.Bool
 	failed.Store(true)
 
 	client.PrependReactor("get", "pods", func(_ kubetesting.Action) (bool, runtime.Object, error) {
-		n := atomic.AddInt64(&gets, 1)
+		n := gets.Add(1)
 		if n == 1 {
 			return true, nil, errors.New("simulated transient API error")
 		}
@@ -327,7 +327,7 @@ func TestMapDoesNotCacheTransientErrors(t *testing.T) {
 	if _, err := m.Map(context.Background(), id); err != nil {
 		t.Fatalf("expected second call to succeed, got %v", err)
 	}
-	if got := atomic.LoadInt64(&gets); got != 2 {
+	if got := gets.Load(); got != 2 {
 		t.Errorf("api GETs = %d, want 2 (transient must not be cached)", got)
 	}
 }
@@ -337,9 +337,9 @@ func TestMapDoesNotCacheTransientErrors(t *testing.T) {
 func TestMapCacheRespectsTTL(t *testing.T) {
 	pod := testPod("prod", "pod-a", "uid-1", "app", "node-7", "img", nil, nil)
 	client := fake.NewSimpleClientset(pod)
-	var gets int64
+	var gets atomic.Int64
 	client.PrependReactor("get", "pods", func(_ kubetesting.Action) (bool, runtime.Object, error) {
-		atomic.AddInt64(&gets, 1)
+		gets.Add(1)
 		return false, nil, nil
 	})
 
@@ -365,7 +365,7 @@ func TestMapCacheRespectsTTL(t *testing.T) {
 	if _, err := m.Map(context.Background(), id); err != nil {
 		t.Fatalf("second map: %v", err)
 	}
-	if got := atomic.LoadInt64(&gets); got != 2 {
+	if got := gets.Load(); got != 2 {
 		t.Errorf("api GETs = %d, want 2 (cache should miss after TTL expiry)", got)
 	}
 }

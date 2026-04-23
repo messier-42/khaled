@@ -65,13 +65,6 @@ jobs:
           echo "DOCKER_HOST=unix:///run/user/${uid}/podman/podman.sock" >> "$GITHUB_ENV"
           podman info --debug
 
-      - name: Podman Credentials
-        run: |
-          podman login \
-            --username gha-readonly \
-            --password "${{ secrets.OCI_GHA_READONLY_PASSWORD }}" \
-            oci.messier42.com
-
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:

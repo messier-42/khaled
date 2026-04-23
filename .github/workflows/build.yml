@@ -1,0 +1,497 @@
+name: Khaled CI/CD
+
+on:
+  push:
+    branches: [master]
+  pull_request: {}
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: "The target version to push a tag for (e.g. v1.2.3, v1.2.3rc5)."
+        required: true
+        type: string
+      release_type:
+        description: "The type of automated release to perform (LIVE or RELENG_TEST)."
+        required: true
+        type: choice
+        options:
+          - LIVE
+          - RELENG_TEST
+
+env:
+  TARGET_VERSION: "${{ inputs.target_version }}"
+  CI_GIT_TOKEN: "${{ secrets.CROSS_REPO_PAT_READ_ONLY || github.token }}"
+
+jobs:
+  build:
+    name: Build Khaled
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Podman Caching
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.local/share/containers
+          key: "podman-cache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}"
+          restore-keys: "podman-cache-${{ runner.os }}-${{ runner.arch }}-"
+
+      - name: Buildah Caching
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/work/_temp/buildah-cache-1001
+          key: "buildah-cache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}"
+          restore-keys: "buildah-cache-${{ runner.os }}-${{ runner.arch }}-"
+
+      - name: Start Podman
+        run: |
+          uid="$(id -u)"
+          podman version
+          buildah version
+          mkdir -p "/run/user/${uid}/podman"
+          nohup podman system service --time=0 "unix:/run/user/${uid}/podman/podman.sock" &
+
+          echo "DOCKER_HOST=unix:///run/user/${uid}/podman/podman.sock" >> "$GITHUB_ENV"
+          podman info --debug
+
+      - name: Podman Credentials
+        run: |
+          podman login \
+            --username gha-readonly \
+            --password "${{ secrets.OCI_GHA_READONLY_PASSWORD }}" \
+            oci.messier42.com
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Build Khaled
+        run: make -j all
+
+      - name: Package sterile binary archive
+        run: |
+          mkdir -p build/out/khaled-linux-amd64
+          cp -a build/out/bin/sterile-khaled build/out/khaled-linux-amd64/khaled
+          tar -C build/out -czf "$(pwd)/build/out/dist/khaled-linux-amd64.tgz" ./khaled-linux-amd64/
+
+      - name: Upload OCI images as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oci-images
+          path: build/out/oci/*.oci
+          if-no-files-found: error
+
+      - name: Upload distribution archives as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-archives
+          path: build/out/dist/*.tgz
+          if-no-files-found: error
+
+      - name: Upload Helm chart as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: build/out/charts/*.tgz
+          if-no-files-found: error
+
+      - name: Podman Cache Fix
+        run: |
+          sudo mv -fv /usr/bin/tar /usr/bin/tar.orig
+          echo -e '#!/bin/sh\n\nsudo /usr/bin/tar.orig "$@"' | sudo tee -a /usr/bin/tar
+          sudo chmod +x /usr/bin/tar
+
+  lint:
+    name: Lint Khaled
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go
+        uses: actions/cache@v4
+        with:
+          path: |
+            /home/runner/.cache/go-build
+            /home/runner/go/pkg
+          key: "lint-go-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}"
+          restore-keys: "lint-go-${{ runner.os }}-${{ runner.arch }}-"
+
+      - name: Create report directory
+        run: mkdir -p build/lint-reports/golangci-lint
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        id: golangci-lint
+        continue-on-error: true
+        with:
+          args: |
+            --config=${{ github.workspace }}/.github/golangci.yaml --output.text.path=stdout --output.json.path=${{ github.workspace }}/build/lint-reports/golangci-lint/khaled.json --output.sarif.path=${{ github.workspace }}/build/lint-reports/golangci-lint/khaled.sarif
+
+      - name: Upload linter reports as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: build/lint-reports
+
+      - name: Ensure linters passed
+        run: |
+          if [[ "${{ steps.golangci-lint.outcome }}" != success ]]; then
+            echo >&2 "golangci-lint execution failed"
+            exit 1
+          fi
+
+  test:
+    name: Test Khaled
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go
+        uses: actions/cache@v4
+        with:
+          path: |
+            /home/runner/.cache/go-build
+            /home/runner/go/pkg
+          key: "test-go-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}"
+          restore-keys: "test-go-${{ runner.os }}-${{ runner.arch }}-"
+
+      - name: Run unit tests
+        run: make utest
+
+  integration:
+    name: Integration Tests Khaled
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go
+        uses: actions/cache@v4
+        with:
+          path: |
+            /home/runner/.cache/go-build
+            /home/runner/go/pkg
+          key: "integration-go-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}"
+          restore-keys: "integration-go-${{ runner.os }}-${{ runner.arch }}-"
+
+      # The integration suite drives a real khaled instance via the
+      # cabe-go ckapclient. Resolution of github.com/messier-42/cabe-go
+      # comes from khaled/go.mod's require directive; no workspace
+      # gymnastics are needed in CI.
+      - name: Run integration tests
+        run: make integration
+
+  integration-k8s:
+    name: K8s Integration Tests Khaled
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout khaled
+        uses: actions/checkout@v4
+        with:
+          path: khaled
+
+      # cabetool is built from cabe-go source by `make cabetool-oci`,
+      # which the kutest target depends on. CABE_GO_DIR points at the
+      # checked-out sibling.
+      - name: Checkout cabe-go
+        uses: actions/checkout@v4
+        with:
+          repository: messier-42/cabe-go
+          path: cabe-go
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: khaled/go.mod
+
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+          version: v0.27.0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Cache Go
+        uses: actions/cache@v4
+        with:
+          path: |
+            /home/runner/.cache/go-build
+            /home/runner/go/pkg
+          key: "kutest-go-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}"
+          restore-keys: "kutest-go-${{ runner.os }}-${{ runner.arch }}-"
+
+      # `make kutest` builds khaled.oci and cabetool.oci, packages
+      # the chart, then runs the kind-based harness which spins up a
+      # fresh cluster, installs SPIRE + khaled + cabetool, and runs
+      # the SPIFFE Features.
+      - name: Run kutest
+        working-directory: khaled
+        env:
+          CABE_GO_DIR: ../cabe-go
+        run: make kutest
+
+  vulnscan:
+    name: Vulnscan Khaled
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download OCI images
+        uses: actions/download-artifact@v7
+        with:
+          name: oci-images
+          path: /var/tmp/artifacts/oci-images
+
+      - name: Configure grype
+        run: cp .github/grype.yaml .grype.yaml
+
+      - name: Run grype (source)
+        uses: anchore/scan-action@v6
+        id: scan-source
+        with:
+          path: .
+          fail-build: false
+
+      - name: Install grype
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b "$HOME/bin"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Run grype (oci-images)
+        run: |
+          set -eo pipefail
+          mkdir -p grype-reports
+          grype "oci-archive:/var/tmp/artifacts/oci-images/khaled.oci" \
+            -o sarif \
+            --file "grype-reports/oci-images-khaled.sarif"
+
+      - name: Collate reports
+        run: |
+          cp "${{ steps.scan-source.outputs.sarif }}" grype-reports/source.sarif
+          for x in grype-reports/*.sarif; do
+            echo "===== SARIF report for $(basename "$x" .sarif)"
+            cat "$x"
+            echo
+            echo "===== End of SARIF report for $(basename "$x" .sarif)"
+            echo
+          done
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-reports
+          path: grype-reports
+
+      - name: Fail if any Medium or higher results
+        run: |
+          did_fail=
+          for x in grype-reports/*; do
+            echo "Checking report: $x"
+            if jq -e 'any(.runs[]?.results[]?;
+                        (.level // "warning") | IN("warning", "error"))' "$x" >/dev/null; then
+              echo "ERROR: $x has a Medium-or-higher result"
+              did_fail=1
+            fi
+          done
+          if [[ -n "$did_fail" ]]; then
+            exit 1
+          fi
+
+  sbom:
+    name: Generate SBOMs For Khaled
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Install Syft
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -sSfL "https://get.anchore.io/syft" | sh -s -- -b "$HOME/bin"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Download OCI images
+        uses: actions/download-artifact@v7
+        with:
+          name: oci-images
+          path: /var/tmp/artifacts/oci-images
+
+      - name: Generate SBOMs (CycloneDX)
+        run: |
+          set -eo pipefail
+
+          images="/var/tmp/artifacts/oci-images"
+          sboms="/var/tmp/sboms"
+          mkdir -p "$sboms"
+          for x in "$images"/*.oci; do
+            n="$(basename "$x" .oci)"
+            echo
+            echo "=== Syfting ${n}..."
+            syft "oci-archive:${x}" -o cyclonedx-json="${sboms}/${n}.cdx.json"
+          done
+
+      - name: Upload SBOMs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sboms
+          path: /var/tmp/sboms/*.cdx.json
+
+  release:
+    name: Release Khaled
+    runs-on: ubuntu-latest
+    needs: [build, lint, test, integration, integration-k8s, vulnscan, sbom]
+    if: "${{ github.event_name == 'workflow_dispatch' }}"
+    environment: release
+
+    permissions:
+      id-token: write
+      contents: write
+
+    outputs:
+      image_khaled: "${{ steps.release.outputs.image_khaled }}"
+      digest_khaled: "${{ steps.release.outputs.digest_khaled }}"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Setup GitHub identity
+        run: echo "${{ secrets.CROSS_REPO_PAT }}" | gh auth login --with-token
+
+      - name: Install regctl
+        uses: regclient/actions/regctl-installer@main
+        with:
+          install-dir: "${{ runner.temp }}/.regctl/bin"
+
+      - name: regctl login
+        uses: regclient/actions/regctl-login@main
+        with:
+          registry: oci.messier42.com
+          username: gha-releng
+          password: "${{ secrets.OCI_GHA_RELENG_PASSWORD }}"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Run autorelease
+        id: release
+        env:
+          RELEASE_TYPE: "${{ inputs.release_type }}"
+          CROSS_REPO_PAT: "${{ secrets.CROSS_REPO_PAT }}"
+        run: ./.github/autorelease
+
+  provenance:
+    name: SLSA Release Provenance (khaled)
+    needs: [release]
+    if: "${{ github.event_name == 'workflow_dispatch' }}"
+    runs-on: ubuntu-latest
+    environment: release
+
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+
+    env:
+      BUILDER_BINARY: slsa-generator-container-linux-amd64
+      BUILDER_DIR: internal/builders/container
+      UNTRUSTED_IMAGE: "${{ needs.release.outputs.image_khaled }}"
+      UNTRUSTED_DIGEST: "${{ needs.release.outputs.digest_khaled }}"
+
+    steps:
+      - name: Generate builder
+        id: generate-builder
+        uses: slsa-framework/slsa-github-generator/.github/actions/generate-builder@main
+        with:
+          repository: slsa-framework/slsa-github-generator
+          ref: refs/tags/v2.1.0
+          go-version: "1.21"
+          binary: "${{ env.BUILDER_BINARY }}"
+          compile-builder: false
+          directory: "${{ env.BUILDER_DIR }}"
+          allow-private-repository: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.0.0
+        with:
+          cosign-release: v3.0.3
+
+      - name: Login
+        run: |
+          cosign login oci.messier42.com \
+            -u gha-releng \
+            -p "${{ secrets.OCI_GHA_RELENG_PASSWORD }}"
+
+      - name: Create and sign provenance
+        env:
+          GITHUB_CONTEXT: "${{ toJSON(github) }}"
+          VARS_CONTEXT: "${{ toJSON(vars) }}"
+        run: |
+          set -euo pipefail
+
+          predicate_name="predicate.json"
+          "$GITHUB_WORKSPACE/$BUILDER_BINARY" generate --predicate="$predicate_name"
+
+          COSIGN_EXPERIMENTAL=1 \
+          cosign attest --predicate="$predicate_name" \
+            --type slsaprovenance \
+            --yes \
+            "${UNTRUSTED_IMAGE}@${UNTRUSTED_DIGEST}"

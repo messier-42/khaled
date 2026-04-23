@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+if [[ -z "${GITHUB_SHA}" ]]; then
+  echo >&2 "$0: This script should be run only in a GitHub actions environment."
+  exit 1
+fi
+
+echo "RELEASE AUTOMATION: Releasing '${TARGET_VERSION}' from '${GITHUB_SHA}'"
+echo "This is a ${RELEASE_TYPE} release triggered by '${GITHUB_ACTOR}'."
+
+if [[ -z "${TARGET_VERSION}" ]]; then
+  echo >&2 "Expected TARGET_VERSION to be set."
+  exit 1
+fi
+
+if ! [[ "${RELEASE_TYPE}" =~ ^(LIVE|RELENG_TEST)$ ]]; then
+  echo >&2 "Invalid release type: ${RELEASE_TYPE}"
+  exit 1
+fi
+
+source "./.github/autorelease.d/${RELEASE_TYPE}"
+
+GH_RELEASE_FILES=()
+
+publish_tag() {
+  echo "About to create and push tag ${TARGET_VERSION} to '${AUTORELEASE_GITHUB_RELEASE_REPO}'..."
+  git tag -a -m "${TARGET_VERSION}" \
+    --trailer "Tagged-By: autorelease (${RELEASE_TYPE})" \
+    "${TARGET_VERSION}" "${GITHUB_SHA}"
+  git push -v "https://token:${CROSS_REPO_PAT}@github.com/${AUTORELEASE_GITHUB_RELEASE_REPO}.git" "${TARGET_VERSION}"
+}
+
+publish_oci_image_to_registry() {
+  local repo digest
+
+  repo="${AUTORELEASE_OCI_REPO_KHALED}"
+  echo "About to push OCI image for ${TARGET_VERSION} to '${repo}'..."
+
+  regctl image import "${repo}:${TARGET_VERSION}" "artifacts/oci-images/khaled.oci"
+  regctl image copy "${repo}:${TARGET_VERSION}" "${repo}:latest"
+
+  cosign sign --yes "${repo}:${TARGET_VERSION}"
+
+  digest="$(regctl image digest "${repo}:${TARGET_VERSION}")"
+  if [[ -z "${digest}" ]]; then
+    echo >&2 "Missing digest for ${repo}:${TARGET_VERSION}"
+    exit 1
+  fi
+
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    echo "image_khaled=${repo}" >> "$GITHUB_OUTPUT"
+    echo "digest_khaled=${digest}" >> "$GITHUB_OUTPUT"
+  fi
+
+  ln "artifacts/oci-images/khaled.oci" "khaled-${TARGET_VERSION}.oci"
+  GH_RELEASE_FILES+=("khaled-${TARGET_VERSION}.oci")
+}
+
+publish_dist() {
+  local src dst
+
+  src="$(echo artifacts/dist-archives/khaled-*.tgz)"
+  if [[ ! -f "${src}" ]]; then
+    echo >&2 "Expected dist archive under artifacts/dist-archives/"
+    exit 1
+  fi
+
+  dst="khaled-${TARGET_VERSION}-linux-amd64.tgz"
+  cp "${src}" "${dst}"
+  GH_RELEASE_FILES+=("${dst}")
+}
+
+publish_gh_release() {
+  echo "About to create GitHub release for ${TARGET_VERSION} in '${AUTORELEASE_GITHUB_RELEASE_REPO}'..."
+  gh release create -R "${AUTORELEASE_GITHUB_RELEASE_REPO}" \
+    --draft --verify-tag "${TARGET_VERSION}" \
+    "${GH_RELEASE_FILES[@]}"
+}
+
+publish_gh_release_finalize() {
+  echo "About to finalize GitHub release for ${TARGET_VERSION} in '${AUTORELEASE_GITHUB_RELEASE_REPO}'..."
+  gh release edit -R "${AUTORELEASE_GITHUB_RELEASE_REPO}" "${TARGET_VERSION}" --draft=false
+}
+
+PUBLISH_STEPS=(
+  publish_tag
+  publish_oci_image_to_registry
+  publish_dist
+  publish_gh_release
+  publish_gh_release_finalize
+)
+
+for PUBLISH_STEP in "${PUBLISH_STEPS[@]}"; do
+  echo >&2 "Release automation: beginning step ${PUBLISH_STEP}"
+  "${PUBLISH_STEP}"
+  echo >&2 "Release automation: completed step ${PUBLISH_STEP}"
+  echo
+done
+
+echo >&2 "Release automation for ${TARGET_VERSION} (${RELEASE_TYPE}) complete"

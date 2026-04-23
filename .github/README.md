@@ -1,6 +1,6 @@
 # khaled: CABE Key Server Reference Implementation
 
-<p align="center"><img src="../doc/img/logo/khaled-mono.svg" alt="khaled"/></p>
+<p align="center"><img src="../doc/img/logo/khaled-mono-auto.svg" alt="khaled"/></p>
 
 Khaled is the reference implementation of a [CABE](https://cabespec.org/) Key
 Server as defined in the [CABE Architecture](https://cabespec.org/spec/arch/)

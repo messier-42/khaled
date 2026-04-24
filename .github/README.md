@@ -14,6 +14,24 @@ In practical terms, `khaled` answers the question:
 
 ---
 
+## Table of Contents
+
+- [Role in the CABE Architecture](#role-in-the-cabe-architecture)
+- [What khaled Does](#what-khaled-does)
+- [Repository Overview](#repository-overview)
+- [Core Runtime Model](#core-runtime-model)
+- [Core Concepts](#core-concepts)
+- [CKAP Operations](#ckap-operations)
+- [Execution Flows](#execution-flows)
+- [Failure Paths](#failure-paths)
+- [Configuration and Reload](#configuration-and-reload)
+- [Plugin Architecture](#plugin-architecture)
+- [Storage Model](#storage-model)
+- [Security Model Summary](#security-model-summary)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [Further Reading](#further-reading)
+
 ## Role in the CABE Architecture
 
 CABE separates data protection from application logic by binding cryptographic access to attributes and policy.

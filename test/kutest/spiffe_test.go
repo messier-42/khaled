@@ -20,7 +20,7 @@ import (
 // here (release "khaled", chart "khaled"), so the Service is named
 // "khaled" (not "khaled-khaled"). The /ckap/ path prefix matches
 // what khaled's HTTP transport registers handlers under.
-const khaledBaseURL = "https://khaled.default.svc:443/ckap/"
+const khaledBaseURL = "https://khaled." + KhaledNamespace + ".svc:443/ckap/"
 
 // serverSPIFFEIDRegex matches khaled's SPIFFE ID (issued by SPIRE
 // per the ClusterSPIFFEID applied by KhaledHelper). Cabetool's

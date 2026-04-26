@@ -53,6 +53,10 @@ DIST_TREE_DIR ?= $(INT_DIR)/dist-tree
 
 CABE_GO_DIR ?= ../cabe-go
 
+# Temporary
+CHART_DIR ?= $(OUT_DIR)/charts
+CHART_SRC_DIR ?= chart/khaled
+
 KHALED_VERSION ?= $(shell if [[ -z "$$TARGET_VERSION" ]]; then k="$$(git describe --tags --exact-match 2>/dev/null || true)"; else k="$$TARGET_VERSION"; fi; if [[ $$k =~ ^v[0-9].*$$ ]]; then echo "$$k"; else echo v0.0.0; fi)
 
 Q=@
@@ -63,7 +67,7 @@ endif
 INFO=@echo -e "\t$(1)\t$(2)"
 
 .PHONY: all
-all: oci-images $(BIN_DIR)/sterile-khaled ## Build everything
+all: oci-images $(BIN_DIR)/sterile-khaled chart ## Build everything
 
 .PHONY: clean
 clean: ## Remove build artifacts
@@ -101,6 +105,14 @@ $(BIN_DIR)/sterile-khaled: $(OCI_DIR)/khaled.oci
 	$(call INFO,EXTRACT,$@)
 	$(Q)CID=$$("$(CONTAINER_TOOL)" create "$(call LAST_BUILD_TAG,khaled)") && \
 	  $(CONTAINER_TOOL) cp "$$CID:/khaled" "$@"; $(CONTAINER_TOOL) rm "$$CID"; chmod +x "$@"
+
+.PHONY: chart
+chart:
+	$(Q)mkdir -p "$(CHART_DIR)"
+	$(call INFO,HELM-LINT,$(CHART_SRC_DIR))
+	$(Q)$(HELM) lint "$(CHART_SRC_DIR)"
+	$(call INFO,HELM-PACK,$(CHART_DIR))
+	$(Q)$(HELM) package "$(CHART_SRC_DIR)" -d "$(CHART_DIR)"
 
 
 ##@ Testing (for development)

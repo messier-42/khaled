@@ -44,7 +44,9 @@ func (ch *KindHelper) Setup() env.Func {
 			return nil, errors.New("kind helper: no scratch dir in context (did ScratchDirHelper run first?)")
 		}
 
-		ch.clusterName = envconf.RandomName("khaled-kutest", 4)
+		ch.clusterName = "khaled-kutest"
+		log.V(2).InfoS("Removing any pre-existing kind cluster", "clusterName", ch.clusterName)
+		_, _ = envfuncs.DestroyCluster(ch.clusterName)(ctx, cfg)
 
 		kindConfigPath := filepath.Join(scratchDir, "kind-config.yaml")
 		kindConfigText := `apiVersion: kind.x-k8s.io/v1alpha4

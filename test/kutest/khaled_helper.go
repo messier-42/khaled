@@ -82,7 +82,7 @@ func (ch *KhaledHelper) String() string { return "Install khaled via helm chart"
 
 const (
 	khaledReleaseName = "khaled"
-	KhaledNamespace   = "default"
+	KhaledNamespace   = "khaled"
 	khaledReadyTimeout = 3 * time.Minute
 )
 
@@ -119,6 +119,7 @@ func (ch *KhaledHelper) Setup() env.Func {
 
 		hm := helm.New(cfg.KubeconfigFile())
 		args := []string{
+			"--create-namespace",
 			"--set", "image.registry=",
 			"--set", "image.repository=" + repo,
 			"--set", "image.tag=" + tag,

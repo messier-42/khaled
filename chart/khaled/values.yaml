@@ -1,0 +1,41 @@
+image:
+  registry: oci.messier42.com
+  repository: cabe/khaled
+  tag: dev
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+rbac:
+  podRead:
+    enabled: false
+config:
+  keyStorage:
+    use: disk
+    disk:
+      path: /var/lib/khaled
+  policyEngine:
+    use: cedar
+  policySource:
+    use: inline
+    inline:
+      text: |
+        permit(principal, action, resource);
+  clientAuthn:
+    use: tls-spiffe
+  claimsMapping:
+    use: static
+    static:
+      principals:
+        - uri: ".*"
+          claims: {}
+  spiffe:
+    workloadSocketPath: /spiffe-workload-api/socket
+  logging:
+    format: json
+    severity: info
+  listeners:
+    - use: http
+      address: "0.0.0.0:8443"
+      http:
+        tls:
+          serverCertificate:
+            source: spiffe

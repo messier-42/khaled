@@ -43,6 +43,7 @@ if (await releaseInfoRoot() !== null)
     });
 
 export default defineConfig({
+  site: 'https://khaled.cabespec.org',
   integrations: [
     starlight({
       title: 'khaled',

@@ -36,6 +36,8 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync/atomic"
+	"time"
 
 	"github.com/messier-42/khaled/pkg/config"
 	klog "github.com/messier-42/khaled/pkg/log"
@@ -44,6 +46,7 @@ import (
 	"github.com/messier-42/khaled/pkg/subsystems/authnsub"
 	"github.com/messier-42/khaled/pkg/subsystems/claimssub"
 	"github.com/messier-42/khaled/pkg/subsystems/keyserversub"
+	"github.com/messier-42/khaled/pkg/subsystems/monitoringsub"
 	"github.com/messier-42/khaled/pkg/subsystems/policysub"
 	"github.com/messier-42/khaled/pkg/subsystems/spiffesub"
 	"github.com/messier-42/khaled/pkg/subsystems/transportsub"
@@ -91,15 +94,42 @@ var finalLoggingConfigObserver func(klog.Config)
 // Run is called to commence operation, and blocks until the supplied context
 // is cancelled, reconciling every manager against fresh snapshots as updates
 // occur.
+//
+// # Startup and shutdown ordering
+//
+// The monitoring listener is started first — before any data-plane
+// subsystem — so /livez and /readyz answer throughout a slow startup
+// (e.g. a hung x509 source surfaces as /readyz 503). It is correspondingly
+// stopped last, so the probes answer honestly across the whole drain.
+//
+// Stop is two-phase. It first sets shuttingDown, flipping /readyz to 503.
+// If a monitoring listener is active and a shutdown-warning time is
+// configured, Stop then sleeps that long — the Shutdown Warning Time —
+// while transports keep serving, giving Kubernetes time to drain the pod
+// from Service endpoints. Only then are subsystems torn down, each
+// transport draining in-flight requests over its own Shutdown Grace Time.
 type Server struct {
 	opts Options
 
-	spiffeSrc    *spiffesub.Manager
-	authnMgr     *authnsub.Manager
-	claimsMgr    *claimssub.Manager
-	policyMgr    *policysub.Manager
-	keyserverMgr *keyserversub.Manager
-	transports   *transportsub.Running
+	// shuttingDown is set true at the start of Stop. readyFunc reads it
+	// to force /readyz to 503 for the duration of the drain.
+	shuttingDown atomic.Bool
+
+	monitoring *monitoringsub.Running
+
+	// The readiness-relevant handles are atomic pointers because the
+	// monitoring listener serves /readyz on its own goroutines (from
+	// the moment it is started, during the rest of New) while New
+	// publishes them and Stop clears them. The remaining handles are
+	// touched only on the New / Run / Stop goroutine and need no
+	// synchronisation.
+	spiffeSrc    atomic.Pointer[spiffesub.Manager]
+	keyserverMgr atomic.Pointer[keyserversub.Manager]
+	transports   atomic.Pointer[transportsub.Running]
+
+	authnMgr  *authnsub.Manager
+	claimsMgr *claimssub.Manager
+	policyMgr *policysub.Manager
 }
 
 // New constructs a top-level khaled instance from an initial
@@ -131,13 +161,29 @@ func New(ctx context.Context, snap config.Snapshot, opts Options) (*Server, erro
 	srv := &Server{opts: opts}
 	starters := resolveStarters(opts.StarterSet)
 
+	// Start the monitoring listener first, before any data-plane
+	// subsystem. readyFunc closes over srv, whose manager handles are
+	// still nil — the closure is null-safe and reports them as "not
+	// started", so /readyz answers 503 with a diagnostic during the
+	// rest of startup. A failure here aborts startup; nothing else is
+	// up yet, so there is nothing to tear down.
+	monCfg, err := monitoringsub.ConfigFromSnapshot(snap)
+	if err != nil {
+		return nil, fmt.Errorf("monitoring config: %w", err)
+	}
+	monitoring, err := starters.Monitoring(ctx, monCfg, srv.readyFunc)
+	if err != nil {
+		return nil, fmt.Errorf("start monitoring listener: %w", err)
+	}
+	srv.monitoring = monitoring
+
 	// Bring subsystems up in dependency order. A failure at any
 	// step calls Stop on what is already up, so no resources leak.
 	spiffeSrc, err := starters.SharedSPIFFE(ctx, snap)
 	if err != nil {
 		return nil, fmt.Errorf("start shared SPIFFE source: %w", err)
 	}
-	srv.spiffeSrc = spiffeSrc
+	srv.spiffeSrc.Store(spiffeSrc)
 
 	authnMgr, err := starters.Authn(snap, spiffeSrc.Current())
 	if err != nil {
@@ -165,7 +211,7 @@ func New(ctx context.Context, snap config.Snapshot, opts Options) (*Server, erro
 		_ = srv.Stop()
 		return nil, fmt.Errorf("start keyserver: %w", err)
 	}
-	srv.keyserverMgr = keyserverMgr
+	srv.keyserverMgr.Store(keyserverMgr)
 
 	deps := plugin.TransportDeps{
 		SharedSPIFFE: spiffeSrc.Current(),
@@ -178,7 +224,7 @@ func New(ctx context.Context, snap config.Snapshot, opts Options) (*Server, erro
 		_ = srv.Stop()
 		return nil, fmt.Errorf("start transports: %w", err)
 	}
-	srv.transports = transports
+	srv.transports.Store(transports)
 
 	return srv, nil
 }
@@ -187,9 +233,31 @@ func New(ctx context.Context, snap config.Snapshot, opts Options) (*Server, erro
 // Stop operation fails with an error, it is logged; the first error encountered
 // is returned. This method is safe to call on a partially-started server,
 // and can be called more than once.
+//
+// Stop is two-phase. It first sets shuttingDown so /readyz reports 503.
+// If the monitoring listener is active and a shutdown-warning time is
+// configured, it then waits that long — the Shutdown Warning Time —
+// before tearing anything down, so Kubernetes can drain the pod from
+// Service endpoints while transports keep serving. The monitoring
+// listener itself is stopped last, so /readyz keeps answering 503
+// throughout the drain.
 func (s *Server) Stop() error {
 	if s == nil {
 		return nil
+	}
+
+	// Phase 0: flip /readyz to 503.
+	s.shuttingDown.Store(true)
+
+	// Phase 1: Shutdown Warning Time. Only meaningful when a monitoring
+	// listener is actually serving — with no /readyz there is nothing
+	// for Kubernetes to observe, so the wait would be dead time.
+	if s.monitoring.Active() {
+		if swt := s.monitoring.ShutdownWarningTime(); swt > 0 {
+			slog.Info("shutdown warning period: draining from service endpoints",
+				"shutdownWarningTime", swt)
+			time.Sleep(swt)
+		}
 	}
 
 	var firstErr error
@@ -203,13 +271,15 @@ func (s *Server) Stop() error {
 		}
 	}
 
-	if s.transports != nil {
-		record("transport", s.transports.Stop())
-		s.transports = nil
+	// Phase 2: tear subsystems down in reverse dependency order.
+	// The atomic-pointer handles are swapped to nil so a concurrent
+	// /readyz request (post-shuttingDown, so already short-circuited)
+	// never observes a half-stopped manager.
+	if tr := s.transports.Swap(nil); tr != nil {
+		record("transport", tr.Stop())
 	}
-	if s.keyserverMgr != nil {
-		record("keyserver", s.keyserverMgr.Stop())
-		s.keyserverMgr = nil
+	if ks := s.keyserverMgr.Swap(nil); ks != nil {
+		record("keyserver", ks.Stop())
 	}
 	if s.policyMgr != nil {
 		record("policy runtime", s.policyMgr.Stop())
@@ -223,9 +293,15 @@ func (s *Server) Stop() error {
 		record("authenticator", s.authnMgr.Stop())
 		s.authnMgr = nil
 	}
-	if s.spiffeSrc != nil {
-		record("shared SPIFFE source", s.spiffeSrc.Stop())
-		s.spiffeSrc = nil
+	if sp := s.spiffeSrc.Swap(nil); sp != nil {
+		record("shared SPIFFE source", sp.Stop())
+	}
+
+	// Phase 3: stop the monitoring listener last, so /livez and /readyz
+	// answered honestly across the whole drain above.
+	if s.monitoring != nil {
+		record("monitoring listener", s.monitoring.Stop())
+		s.monitoring = nil
 	}
 
 	return firstErr
@@ -240,12 +316,14 @@ func (s *Server) Stop() error {
 // Returns nil on graceful shutdown (context cancellation) or when
 // the source closes its update channel.
 func (s *Server) Run(ctx context.Context, source configsource.Source) error {
+	// Run is called once, after New has published every handle, so the
+	// atomic loads here always observe the live managers.
 	return runReloadLoop(ctx, source, s.opts,
-		s.spiffeSrc.Reconcile,
+		s.spiffeSrc.Load().Reconcile,
 		s.authnMgr.Reconcile,
 		s.claimsMgr.Reconcile,
 		s.policyMgr.Reconcile,
-		s.keyserverMgr.Reconcile,
+		s.keyserverMgr.Load().Reconcile,
 	)
 }
 
@@ -254,8 +332,12 @@ func (s *Server) Run(ctx context.Context, source configsource.Source) error {
 // a kernel-assigned port (":0") and need to learn the chosen one.
 // The returned slice is empty if Stop has already been called.
 func (s *Server) ListenerAddresses() []net.Addr {
-	if s == nil || s.transports == nil {
+	if s == nil {
 		return nil
 	}
-	return s.transports.Addresses()
+	tr := s.transports.Load()
+	if tr == nil {
+		return nil
+	}
+	return tr.Addresses()
 }

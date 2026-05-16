@@ -9,6 +9,7 @@ import (
 	"github.com/messier-42/khaled/pkg/subsystems/authnsub"
 	"github.com/messier-42/khaled/pkg/subsystems/claimssub"
 	"github.com/messier-42/khaled/pkg/subsystems/keyserversub"
+	"github.com/messier-42/khaled/pkg/subsystems/monitoringsub"
 	"github.com/messier-42/khaled/pkg/subsystems/policysub"
 	"github.com/messier-42/khaled/pkg/subsystems/spiffesub"
 	"github.com/messier-42/khaled/pkg/subsystems/transportsub"
@@ -25,6 +26,7 @@ import (
 // outside pkg/server — notably cmd/khaled — can construct one.
 // Production callers must not set Options.StarterSet.
 type StarterSet struct {
+	Monitoring   func(context.Context, monitoringsub.Config, monitoringsub.ReadyFunc) (*monitoringsub.Running, error)
 	Transport    func(context.Context, config.Snapshot, plugin.TransportDeps) (*transportsub.Running, error)
 	Policy       func(context.Context, config.Snapshot) (*policysub.Manager, error)
 	SharedSPIFFE func(context.Context, config.Snapshot) (*spiffesub.Manager, error)
@@ -38,6 +40,10 @@ type StarterSet struct {
 // can copy and selectively override.
 func MockStarterSet() StarterSet {
 	return StarterSet{
+		Monitoring: func(context.Context, monitoringsub.Config, monitoringsub.ReadyFunc) (*monitoringsub.Running, error) {
+			// Disabled by default: an empty Config yields an inert Running.
+			return monitoringsub.New(context.Background(), monitoringsub.Config{}, nil)
+		},
 		Transport: func(context.Context, config.Snapshot, plugin.TransportDeps) (*transportsub.Running, error) {
 			return transportsub.NewEmpty(), nil
 		},
@@ -66,6 +72,7 @@ func MockStarterSet() StarterSet {
 // production.
 func resolveStarters(overrides *StarterSet) StarterSet {
 	s := StarterSet{
+		Monitoring:   monitoringsub.New,
 		Transport:    transportsub.New,
 		Policy:       policysub.New,
 		SharedSPIFFE: spiffesub.New,
@@ -75,6 +82,9 @@ func resolveStarters(overrides *StarterSet) StarterSet {
 	}
 	if overrides == nil {
 		return s
+	}
+	if overrides.Monitoring != nil {
+		s.Monitoring = overrides.Monitoring
 	}
 	if overrides.Transport != nil {
 		s.Transport = overrides.Transport

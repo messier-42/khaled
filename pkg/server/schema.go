@@ -4,6 +4,7 @@ import (
 	"github.com/messier-42/khaled/pkg/config/schema"
 	klog "github.com/messier-42/khaled/pkg/log"
 	"github.com/messier-42/khaled/pkg/plugin"
+	"github.com/messier-42/khaled/pkg/subsystems/monitoringsub"
 	"github.com/messier-42/khaled/pkg/subsystems/spiffesub"
 )
 
@@ -24,6 +25,7 @@ func BuildRegistry() (*schema.Registry, error) {
 		plugin.RegisterClaimsMappingSchemas,
 		plugin.RegisterTransportSchemas,
 		spiffesub.RegisterSchema,
+		monitoringsub.RegisterSchema,
 		klog.RegisterSchema,
 	}
 	for _, fn := range contributors {

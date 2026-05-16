@@ -128,6 +128,35 @@ spec:
             - name: https
               containerPort: 8443
               protocol: TCP
+            {{- if .Values.config.monitoring.address }}
+            - name: monitoring
+              containerPort: {{ (splitList ":" .Values.config.monitoring.address) | last }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.config.monitoring.address }}
+          # Kubernetes probes target the plaintext monitoring listener.
+          # startupProbe gates liveness/readiness until the process is
+          # serving, tolerating a slow first start (e.g. a slow SPIFFE
+          # source) for up to 60s. livenessProbe restarts a wedged
+          # process; readinessProbe drains the pod from the Service
+          # whenever a subsystem is not ready.
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: monitoring
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: monitoring
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: monitoring
+            periodSeconds: 5
+          {{- end }}
           resources: {}
           volumeMounts:
             - name: data

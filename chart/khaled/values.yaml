@@ -39,3 +39,9 @@ config:
         tls:
           serverCertificate:
             source: spiffe
+  monitoring:
+    # Plaintext HTTP listener for /livez and /readyz. The probes
+    # defined on the StatefulSet below point at this port. Set the
+    # address to "" to disable the monitoring listener and the probes.
+    address: "0.0.0.0:8081"
+    shutdownWarningTime: "5s"

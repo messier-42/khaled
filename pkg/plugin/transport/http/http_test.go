@@ -458,6 +458,44 @@ func TestConfigFromSnapshotRequiresAddress(t *testing.T) {
 	}
 }
 
+func TestConfigFromSnapshotShutdownGraceTime(t *testing.T) {
+	entry := config.Map{
+		"use":     "http",
+		"address": ":5000",
+		"http":    config.Map{"shutdownGraceTime": "7s"},
+	}
+	cfg, err := httpt.ConfigFromSnapshot(entry, config.Map{})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if cfg.ShutdownGraceTime != 7*time.Second {
+		t.Errorf("ShutdownGraceTime = %v, want 7s", cfg.ShutdownGraceTime)
+	}
+}
+
+func TestConfigFromSnapshotUnsetShutdownGraceTimeLeavesZero(t *testing.T) {
+	// Unset leaves the field zero so New applies DefaultShutdownGraceTime.
+	entry := config.Map{"use": "http", "address": ":5000"}
+	cfg, err := httpt.ConfigFromSnapshot(entry, config.Map{})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if cfg.ShutdownGraceTime != 0 {
+		t.Errorf("ShutdownGraceTime = %v, want 0", cfg.ShutdownGraceTime)
+	}
+}
+
+func TestConfigFromSnapshotRejectsBadShutdownGraceTime(t *testing.T) {
+	entry := config.Map{
+		"use":     "http",
+		"address": ":5000",
+		"http":    config.Map{"shutdownGraceTime": "not-a-duration"},
+	}
+	if _, err := httpt.ConfigFromSnapshot(entry, config.Map{}); err == nil {
+		t.Fatalf("expected bad shutdownGraceTime to fail")
+	}
+}
+
 func TestCertConfigFromSnapshotDefaultsSourceToFile(t *testing.T) {
 	entry := config.Map{
 		"use":     "http",

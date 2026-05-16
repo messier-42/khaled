@@ -32,9 +32,9 @@ import (
 	"github.com/messier-42/khaled/pkg/x509source"
 )
 
-// DefaultGracefulShutdownDuration is the default amount of time to wait
+// DefaultShutdownGraceTime is the default amount of time to wait
 // for in-flight requests to complete during shutdown.
-const DefaultGracefulShutdownDuration = 1 * time.Second
+const DefaultShutdownGraceTime = 1 * time.Second
 
 // Config is the resolved configuration for a single CABE HTTP transport
 // instance. It is generally created using [ConfigFromSnapshot] so as to
@@ -70,9 +70,9 @@ type Config struct {
 	// operations.
 	GetKeyServerFunc func() *keyserver.Server
 
-	// GracefulShutdownDuration specifies the amount of time to wait for existing requests
-	// to complete. If zero, DefaultGracefulShutdownDuration is used.
-	GracefulShutdownDuration time.Duration
+	// ShutdownGraceTime specifies the amount of time to wait for existing requests
+	// to complete. If zero, DefaultShutdownGraceTime is used.
+	ShutdownGraceTime time.Duration
 }
 
 // Transport is an HTTPS listener plugin instance.
@@ -108,8 +108,8 @@ func New(ctx context.Context, cfg Config) (*Transport, error) {
 		return nil, errors.New("http transport: claims mapping configured without client authentication")
 	}
 
-	if cfg.GracefulShutdownDuration == 0 {
-		cfg.GracefulShutdownDuration = DefaultGracefulShutdownDuration
+	if cfg.ShutdownGraceTime == 0 {
+		cfg.ShutdownGraceTime = DefaultShutdownGraceTime
 	}
 
 	var lc net.ListenConfig
@@ -253,7 +253,7 @@ func (t *Transport) Run(ctx context.Context) error {
 		// already cancelled, which would cause Shutdown to abort
 		// immediately rather than give in-flight requests time to
 		// complete.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), t.cfg.GracefulShutdownDuration)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), t.cfg.ShutdownGraceTime)
 		defer cancel()
 
 		_ = srv.Shutdown(shutdownCtx) //nolint:contextcheck // intentional detached context for graceful shutdown
@@ -264,20 +264,35 @@ func (t *Transport) Run(ctx context.Context) error {
 	}
 }
 
-// ConfigFromSnapshot extracts the address from a listener entry. The
-// remaining fields of Config (CertSource, KeyLog, delegates) are
-// runtime resources supplied by the caller; use [CertConfigFromSnapshot]
-// and [KeyLogPathFromSnapshot] to recover the schema-level inputs
-// needed to construct them.
+// ConfigFromSnapshot extracts the schema-level fields (address,
+// shutdownGraceTime) from a listener entry. The remaining fields of
+// Config (CertSource, KeyLog, delegates) are runtime resources
+// supplied by the caller; use [CertConfigFromSnapshot] and
+// [KeyLogPathFromSnapshot] to recover the schema-level inputs needed
+// to construct them.
 //
 // JSON schema validation should already have been performed before
-// calling this function.
+// calling this function. shutdownGraceTime, if unset, leaves
+// Config.ShutdownGraceTime zero so that New applies
+// DefaultShutdownGraceTime.
 func ConfigFromSnapshot(listenerEntry config.Map, _ config.Map) (Config, error) {
 	address, ok := listenerEntry.GetString("address")
 	if !ok || address == "" {
 		return Config{}, errors.New("listeners[]: address is required")
 	}
-	return Config{Address: address}, nil
+
+	cfg := Config{Address: address}
+
+	httpBlock, _ := listenerEntry.GetMap("http")
+	if raw, ok := httpBlock.GetString("shutdownGraceTime"); ok && raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("listeners[].http.shutdownGraceTime: %w", err)
+		}
+		cfg.ShutdownGraceTime = d
+	}
+
+	return cfg, nil
 }
 
 // CertConfigFromSnapshot extracts the x509source.Config that describes

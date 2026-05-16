@@ -33,6 +33,10 @@ func ListenerEntrySchema() *jsonschema.Schema {
 				Type: "object",
 				Properties: map[string]*jsonschema.Schema{
 					"tls": tlsBlock,
+					// Graceful-shutdown grace period: how long srv.Shutdown
+					// waits for in-flight requests to drain. A Go duration
+					// string; time.ParseDuration does the real validation.
+					"shutdownGraceTime": {Type: "string", MinLength: &minOne},
 				},
 			},
 		},

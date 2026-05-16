@@ -265,4 +265,32 @@ listeners:
         #
         # DO NOT SPECIFY THIS SETTING IN PRODUCTION.
         keylog: "/tmp/key.log"
+
+      # Optional. Duration string (e.g. "1s"). On shutdown, how long
+      # this listener waits for in-flight requests to drain before the
+      # socket is closed. Defaults to "1s".
+      shutdownGraceTime: "1s"
+
+# Optional. Operational monitoring listener. Serves Kubernetes-style
+# /livez and /readyz health probes over plaintext HTTP, kept separate
+# from the mTLS CKAP listeners above (which kubelet probes cannot
+# reach). The listener is disabled by default and enabled by setting a
+# non-empty address.
+monitoring:
+  # Optional. String. Plaintext HTTP listen address for the monitoring
+  # endpoints. Empty (the default) disables the monitoring listener.
+  #
+  # /livez always reports 200 once the process is up — liveness is
+  # pure process-aliveness. /readyz reports 200 when every subsystem
+  # is ready to serve and 503 otherwise; /readyz?verbose adds a
+  # per-check body. Point Kubernetes livenessProbe at /livez and
+  # readinessProbe at /readyz.
+  address: "0.0.0.0:8081"
+
+  # Optional. Duration string (e.g. "5s"). On shutdown, /readyz flips
+  # to 503 and the server keeps serving for this long before tearing
+  # subsystems down, giving Kubernetes time to drain the pod from
+  # Service endpoints. Only has effect when address is set. Default
+  # "5s".
+  shutdownWarningTime: "5s"
 ```

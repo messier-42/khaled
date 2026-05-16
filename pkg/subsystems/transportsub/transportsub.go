@@ -141,6 +141,33 @@ func (r *Running) Addresses() []net.Addr {
 	return addrs
 }
 
+// Ready reports whether every transport is serving: each transport
+// that exposes an address via BoundAddrer must report a non-nil bound
+// address. A transport that does not implement BoundAddrer cannot be
+// inspected and is assumed ready.
+//
+// A nil Running, or one with no transports (Stop has run, or none were
+// configured), is ready: there is nothing un-bound. Note that New
+// binds every listener eagerly during construction, so a non-nil
+// Running returned by New is already fully bound; the meaningful
+// "transports not ready" signal is therefore a nil Running, which the
+// caller (pkg/server) reports as "not started".
+func (r *Running) Ready() bool {
+	if r == nil {
+		return true
+	}
+	for _, t := range r.transports {
+		ba, ok := t.(BoundAddrer)
+		if !ok {
+			continue
+		}
+		if ba.BoundAddr() == nil {
+			return false
+		}
+	}
+	return true
+}
+
 func closeAll(ts []transport.Transport) {
 	for _, t := range ts {
 		_ = t.Close()

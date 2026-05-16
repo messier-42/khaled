@@ -35,6 +35,22 @@ type Stack struct {
 // Server returns the stack's keyserver.
 func (s *Stack) Server() *keyserver.Server { return s.server }
 
+// Healthy reports whether the stack is fully constructed and ready to
+// serve CKAP requests: the store, schedule and server are all present.
+//
+// This is a cheap, non-blocking liveness read intended for the /readyz
+// readiness check, which is polled frequently. It deliberately does no
+// I/O — it does not open the DB or take the keystorage file lock. The
+// store proved itself usable when it was constructed (DB opened, lock
+// acquired); had that failed, buildStack would have returned an error
+// and no Stack would exist, so last-known-good is reported instead.
+//
+// A nil Stack — never started, or a failed partial startup — is not
+// healthy.
+func (s *Stack) Healthy() bool {
+	return s != nil && s.store != nil && s.schedule != nil && s.server != nil
+}
+
 // Close tears the stack down. The keyserver holds no resources of its
 // own. The key schedule stops its background rotation goroutine; the
 // key store closes the DB and releases the OS file lock.

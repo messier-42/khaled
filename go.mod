@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/ldclabs/cose v1.4.0
-	github.com/messier-42/cabe-go v1.0.2
+	github.com/messier-42/cabe-go v1.0.3-0.20261005170058-ca94ddd31b5b
 	github.com/spf13/cobra v1.10.2
 	github.com/spiffe/go-spiffe/v2 v2.8.1
 	golang.org/x/sync v0.22.0

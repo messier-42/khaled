@@ -1,9 +1,10 @@
 // Package keystorage defines the Key Storage plugin interface.
 //
-// A Key Storage plugin holds Root Keys (the only Non-Derived Keys in
-// the key schedule currently used by khaled) and exposes a deterministic
-// key derivation primitive built on top of them. Root Keys are opaque handles;
-// the plugin never exposes their bit pattern, so a backend whose root
+// A Key Storage plugin holds Root Keys and exposes a deterministic key
+// derivation primitive built on top of them. Backends may also implement
+// FederationDomain to retain opaque Federation Keys for CFAR recovery.
+// Root Keys are opaque handles; the plugin never exposes their bit pattern,
+// so a backend whose root
 // material is held in some captive store (e.g. a HSM, TPM, or AWS KMS) can
 // implement the same interface. Thus, the Key Storage plugin interface is
 // agnostic to the storage method used.
@@ -114,7 +115,8 @@ var ErrNoSuchRootKey = errors.New("no such root key")
 
 // KeyStore is the Key Storage plugin interface. A KeyStore is a
 // container of one or more KeyStoreDomains. All methods are safe for
-// concurrent use from multiple goroutines.
+// concurrent use from multiple goroutines. Iterators release database resources
+// before yielding so callbacks may perform further storage operations.
 type KeyStore interface {
 	io.Closer
 

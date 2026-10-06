@@ -103,29 +103,37 @@ func (d *domain) rootKeyBySeqNum(ctx context.Context, seqNum uint64) (keystorage
 func (d *domain) ListRootKeys(ctx context.Context) iter.Seq2[keystorage.RootKey, error] {
 	return func(yield func(keystorage.RootKey, error) bool) {
 		rows, err := d.store.db.QueryContext(ctx,
-			`SELECT `+rootKeyColumns+` FROM root_key
-			  WHERE domain_id = ?
-			  ORDER BY seq_num DESC`,
-			d.rowID,
-		)
+			`SELECT `+rootKeyColumns+` FROM root_key WHERE domain_id = ? ORDER BY seq_num DESC`, d.rowID)
 		if err != nil {
 			yield(nil, fmt.Errorf("disk keystorage: list root keys for domain %q: %w", d.name, err))
 			return
 		}
-		defer rows.Close() // best effort
-
+		defer func() { _ = rows.Close() }()
+		// Release the sole connection before callbacks use these key handles.
+		var keys []*rootKey
 		for rows.Next() {
-			k, err := scanRootKey(rows, d.rowID)
+			var k *rootKey
+			k, err = scanRootKey(rows, d.rowID)
 			if err != nil {
-				yield(nil, fmt.Errorf("disk keystorage: scan root key for domain %q: %w", d.name, err))
-				return
+				break
 			}
+			keys = append(keys, k)
+		}
+		if err == nil {
+			err = rows.Err()
+		}
+		closeErr := rows.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			yield(nil, fmt.Errorf("disk keystorage: iterate root keys for domain %q: %w", d.name, err))
+			return
+		}
+		for _, k := range keys {
 			if !yield(k, nil) {
 				return
 			}
-		}
-		if err := rows.Err(); err != nil {
-			yield(nil, fmt.Errorf("disk keystorage: iterate root keys for domain %q: %w", d.name, err))
 		}
 	}
 }

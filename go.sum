@@ -89,6 +89,8 @@ github.com/messier-42/cabe-go v1.0.1 h1:lYfOuhnfkOQBPnMRAxxNHrdl5ldB/MLvwZaW8MBk
 github.com/messier-42/cabe-go v1.0.1/go.mod h1:8hv7Js7q81zkB9wtZteWeJ1RyKFQf+kuTnRnumiy4JU=
 github.com/messier-42/cabe-go v1.0.2 h1:Ew5etr2YbVTHpzxSTcTrZoabahtaOE1lx9uHBCPMgGQ=
 github.com/messier-42/cabe-go v1.0.2/go.mod h1:TlokDMyf9ZjISsnu0l0aaU2BXn7zsuHt3vr1euaeEO4=
+github.com/messier-42/cabe-go v1.0.3-0.20261005170058-ca94ddd31b5b h1:lK5UlMxiYWROprvELgyR2YOH3oScdvgs1ybPBYUuzqg=
+github.com/messier-42/cabe-go v1.0.3-0.20261005170058-ca94ddd31b5b/go.mod h1:D5j7ohh1dhkanSP/7ZziBjuop75DmYXAP9TMNzY7YDk=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w8PVh93nsPXa1VrQ6jlwL5oN8l14QlcNfg=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=

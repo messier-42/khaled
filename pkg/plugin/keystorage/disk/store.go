@@ -36,7 +36,7 @@ const (
 
 	// schemaVersion is the current schema version.
 	// Bumped by future migrations.
-	schemaVersion = "1"
+	schemaVersion = "2"
 
 	// rootKeyLen is the length in bytes of newly-generated Root
 	// Keys.
@@ -216,6 +216,18 @@ func bootstrap(ctx context.Context, db *sql.DB, now func() time.Time) error {
 	if err != nil {
 		return fmt.Errorf("disk key storage: read schema_version: %w", err)
 	}
+	if got == "1" {
+		if _, err := tx.ExecContext(ctx, federationSchemaDDL); err != nil {
+			return fmt.Errorf("disk key storage: migrate federation schema: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE khaled_meta SET value=? WHERE key='schema_version'`, schemaVersion); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("disk key storage: commit migration: %w", err)
+		}
+		return nil
+	}
 	if got != schemaVersion {
 		return fmt.Errorf("disk key storage: unsupported schema_version %q (expected %q)", got, schemaVersion)
 	}
@@ -259,7 +271,7 @@ CREATE TABLE key_series (
 `
 
 func createSchema(ctx context.Context, tx *sql.Tx) error {
-	if _, err := tx.ExecContext(ctx, schemaDDL); err != nil {
+	if _, err := tx.ExecContext(ctx, schemaDDL+federationSchemaDDL); err != nil {
 		return fmt.Errorf("disk key storage: create schema: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -310,22 +322,32 @@ func (s *Store) ListDomains(ctx context.Context) iter.Seq2[keystorage.KeyStoreDo
 			yield(nil, fmt.Errorf("disk key storage: list domains: %w", err))
 			return
 		}
-		defer rows.Close() // best effort
-
+		defer func() { _ = rows.Close() }()
+		// Release the sole connection before callers perform nested storage work.
+		var domains []*domain
 		for rows.Next() {
 			var id int64
 			var name string
-			if err := rows.Scan(&id, &name); err != nil {
-				yield(nil, fmt.Errorf("disk key storage: scan domain row: %w", err))
-				return
+			if err = rows.Scan(&id, &name); err != nil {
+				break
 			}
-			d := s.domainFor(id, name)
+			domains = append(domains, s.domainFor(id, name))
+		}
+		if err == nil {
+			err = rows.Err()
+		}
+		closeErr := rows.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			yield(nil, fmt.Errorf("disk key storage: iterate domains: %w", err))
+			return
+		}
+		for _, d := range domains {
 			if !yield(d, nil) {
 				return
 			}
-		}
-		if err := rows.Err(); err != nil {
-			yield(nil, fmt.Errorf("disk key storage: iterate domains: %w", err))
 		}
 	}
 }

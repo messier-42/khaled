@@ -294,3 +294,23 @@ monitoring:
   # "5s".
   shutdownWarningTime: "5s"
 ```
+
+## CFAR federation
+
+The optional `federation` block enables Non-Captive federation. Private Federation
+Keys are retained in the existing SQLite key store, not in configuration files.
+
+| Field | Meaning/default |
+| --- | --- |
+| `domainID` | Required stable nonempty federation Domain ID; bound durably to the storage Domain and cannot be changed. |
+| `curve` | Generation preference: `P-256` (default), `P-384`, or `P-521`. |
+| `algorithm` | `ECDH-ES+A256KW` (default), `ECDH-ES+A128KW`, or `ECDH-ES+A192KW`. |
+| `identityMaxAge` | Maximum public discovery freshness, default `1m`, capped by the next lifecycle transition; `0s` forces revalidation. |
+| `cacheBytes` | Total encrypted-package cache budget, default `8388608`; `0` disables it; maximum `1073741824`. |
+| `cacheTTL` | Package retention, default `5m`; must be positive when the cache is enabled. |
+| `peers` | Optional list of expected peer identities and public-key sources. |
+| `peers[].domainID` | Required expected peer Domain ID, distinct from the local ID and other peers. |
+| `peers[].identity` | Base64 CKAP FederationIdentity CBOR, exported by `khaled federation identity`; mutually exclusive with `url`/`caFile`. |
+| `peers[].url` | HTTPS CKAP base URL for public discovery, mutually exclusive with `identity`. |
+| `peers[].caFile` | Optional PEM CA file for discovery TLS; requires `url`. |
+

@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,9 +56,11 @@ const (
 // needed to write the current crop of integration tests; additional
 // knobs land here as tests need them.
 type startConfig struct {
-	policy       string
-	auth         authMode
-	principalURI string
+	federation    config.Map
+	keyStorageDir string
+	policy        string
+	auth          authMode
+	principalURI  string
 }
 
 // Option mutates a startConfig before Start materialises a snapshot.
@@ -100,6 +103,7 @@ func WithPrincipal(uri string) Option {
 // port. Stop is registered with t.Cleanup so the test does not need
 // to call it explicitly.
 type Server struct {
+	stop    func() error
 	srv     *server.Server
 	source  *inMemorySource
 	baseURL string
@@ -148,7 +152,10 @@ func Start(t *testing.T, opts ...Option) *Server {
 		t.Fatalf("khaledtest: write policy file: %v", err)
 	}
 
-	keyStorageDir := filepath.Join(t.TempDir(), "keystorage")
+	keyStorageDir := cfg.keyStorageDir
+	if keyStorageDir == "" {
+		keyStorageDir = filepath.Join(t.TempDir(), "keystorage")
+	}
 	if err := os.MkdirAll(keyStorageDir, 0o700); err != nil {
 		t.Fatalf("khaledtest: create keystorage dir: %v", err)
 	}
@@ -162,6 +169,9 @@ func Start(t *testing.T, opts ...Option) *Server {
 		Auth:          cfg.auth,
 	})
 
+	if cfg.federation != nil {
+		snap.Root["federation"] = cfg.federation
+	}
 	registry, err := server.BuildRegistry()
 	if err != nil {
 		t.Fatalf("khaledtest: build registry: %v", err)
@@ -195,17 +205,20 @@ func Start(t *testing.T, opts ...Option) *Server {
 		}
 	}()
 
+	var stopOnce sync.Once
+	var stopErr error
+	stop := func() error {
+		stopOnce.Do(func() {
+			cancel()
+			_ = source.Close()
+			<-loopDone
+			stopErr = srv.Stop()
+		})
+		return stopErr
+	}
 	t.Cleanup(func() {
-		// Order matters: cancel the context first so RunReloadLoop
-		// returns; close the source so any reload goroutine racing
-		// the cancel exits cleanly; wait for the loop; then Stop
-		// the server. Inverting the cancel/Stop pair would let Stop
-		// race a still-running Reconcile from a final reload.
-		cancel()
-		_ = source.Close()
-		<-loopDone
-		if err := srv.Stop(); err != nil {
-			t.Logf("khaledtest: server.Stop: %v", err)
+		if err := stop(); err != nil {
+			t.Logf("khaledtest: stop: %v", err)
 		}
 	})
 
@@ -216,6 +229,7 @@ func Start(t *testing.T, opts ...Option) *Server {
 
 	return &Server{
 		srv:           srv,
+		stop:          stop,
 		source:        source,
 		baseURL:       fmt.Sprintf("https://%s/ckap/", addrs[0].String()),
 		auth:          cfg.auth,
@@ -267,6 +281,9 @@ func (s *Server) Reload(t *testing.T, opts ...Option) {
 		Auth:          cfg.auth,
 	})
 
+	if cfg.federation != nil {
+		snap.Root["federation"] = cfg.federation
+	}
 	registry, err := server.BuildRegistry()
 	if err != nil {
 		t.Fatalf("khaledtest: build registry: %v", err)
@@ -295,8 +312,26 @@ func (s *Server) Reload(t *testing.T, opts ...Option) {
 // instead.
 func (s *Server) WritePolicy(t *testing.T, cedarText string) {
 	t.Helper()
-	if err := os.WriteFile(s.policyPath, []byte(cedarText), 0o600); err != nil {
+	// Publish one complete policy. Truncating in place can let the watcher
+	// compile an intermediate empty policy as valid before reading the update.
+	f, err := os.CreateTemp(filepath.Dir(s.policyPath), ".policy-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Remove(f.Name()); err != nil && !os.IsNotExist(err) {
+			t.Errorf("khaledtest: remove temporary policy file: %v", err)
+		}
+	}()
+	if _, err := f.WriteString(cedarText); err != nil {
+		_ = f.Close()
 		t.Fatalf("khaledtest: write policy file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(f.Name(), s.policyPath); err != nil {
+		t.Fatalf("khaledtest: publish policy file: %v", err)
 	}
 }
 
@@ -526,3 +561,12 @@ func buildAuthnAndClaims(mode authMode, caBundlePath string) (config.Map, config
 		panic(fmt.Sprintf("khaledtest: unknown auth mode %v", mode))
 	}
 }
+
+// WithFederation configures the real federation subsystem for integration tests.
+func WithFederation(block config.Map) Option { return func(c *startConfig) { c.federation = block } }
+
+// WithKeyStorageDir preserves a key store across service restarts.
+func WithKeyStorageDir(dir string) Option { return func(c *startConfig) { c.keyStorageDir = dir } }
+
+// Stop closes the service, releasing its SQLite lock for offline maintenance.
+func (s *Server) Stop() error { return s.stop() }

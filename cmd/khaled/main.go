@@ -227,6 +227,7 @@ func newRootCmd(opts *options, stdout io.Writer, stderr io.Writer) *cobra.Comman
 
 	// Subcommands
 	cmd.AddCommand(newConfigSchemaCmd())
+	cmd.AddCommand(newFederationCmd())
 
 	return cmd
 }

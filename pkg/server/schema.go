@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/messier-42/khaled/pkg/config/schema"
+	"github.com/messier-42/khaled/pkg/federation"
 	klog "github.com/messier-42/khaled/pkg/log"
 	"github.com/messier-42/khaled/pkg/plugin"
 	"github.com/messier-42/khaled/pkg/subsystems/monitoringsub"
@@ -19,6 +20,7 @@ func BuildRegistry() (*schema.Registry, error) {
 
 	contributors := []func(*schema.Registry) error{
 		plugin.RegisterKeyStorageSchemas,
+		federation.RegisterSchema,
 		plugin.RegisterPolicyEngineSchemas,
 		plugin.RegisterPolicySourceSchemas,
 		plugin.RegisterClientAuthnSchemas,

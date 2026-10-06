@@ -1,4 +1,4 @@
-package http
+package keyserver
 
 import (
 	"crypto/hkdf"

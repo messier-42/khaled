@@ -11,7 +11,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
+
+	"github.com/messier-42/khaled/pkg/federation"
 
 	"github.com/messier-42/khaled/pkg/config"
 	"github.com/messier-42/khaled/pkg/keyschedule"
@@ -28,6 +31,7 @@ import (
 // invalidates everything built on top.
 type Stack struct {
 	store    keystorage.KeyStore
+	domain   keystorage.KeyStoreDomain
 	schedule *keyschedule.Schedule
 	server   *keyserver.Server
 }
@@ -138,10 +142,23 @@ func spec(policy keyserver.PolicySource) lifecycle.Spec[*Stack] {
 			if old != nil {
 				oldArgs, err := argsFromSnapshot(oldSnap)
 				if err == nil && oldArgs == newArgs {
+					if !reflect.DeepEqual(oldSnap.Root["federation"], newSnap.Root["federation"]) {
+						if err := old.configureFederation(ctx, newSnap); err != nil {
+							return nil, err
+						}
+					}
 					return old, nil
 				}
 			}
-			return buildStack(ctx, newArgs, policy)
+			next, err := buildStack(ctx, newArgs, policy)
+			if err != nil {
+				return nil, err
+			}
+			if err = next.configureFederation(ctx, newSnap); err != nil {
+				_ = next.Close()
+				return nil, err
+			}
+			return next, nil
 		},
 		Close: func(s *Stack) error { return s.Close() },
 	}
@@ -203,6 +220,7 @@ func buildStack(ctx context.Context, args argsData, policy keyserver.PolicySourc
 	ok = true
 	return &Stack{
 		store:    store,
+		domain:   domain,
 		schedule: sched,
 		server:   srv,
 	}, nil
@@ -262,4 +280,34 @@ func argsFromSnapshot(snap config.Snapshot) (argsData, error) {
 	}
 
 	return args, nil
+}
+
+// configureFederation reuses the live Domain handle; only runtime policy and
+// volatile caches change. Validation failure leaves the active runtime intact.
+func (s *Stack) configureFederation(ctx context.Context, snap config.Snapshot) error {
+	cfg, err := federation.ConfigFromSnapshot(snap)
+	if err != nil {
+		return err
+	}
+	d, ok := s.domain.(keystorage.FederationDomain)
+	if ok {
+		id, err := d.FederationIdentity(ctx)
+		if err != nil {
+			return err
+		}
+		if err = s.server.BindFederationDomainID(id); err != nil {
+			return err
+		}
+	}
+	if cfg == nil {
+		return s.server.SetFederation(nil)
+	}
+	if !ok {
+		return errors.New("key storage does not support federation")
+	}
+	runtime, err := federation.New(ctx, d, *cfg)
+	if err != nil {
+		return err
+	}
+	return s.server.SetFederation(runtime)
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/messier-42/cabe-go/attrset"
+	"github.com/messier-42/cabe-go/cabe"
 	"github.com/messier-42/khaled/pkg/keywrap"
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 )
@@ -65,11 +66,21 @@ func (s *Server) Prograde(ctx context.Context, req ProgradeRequest) (ProgradeRes
 		}
 		lease.LKAI = LKAI{Captive: &LKAICaptive{LKAT: lkat}}
 	} else {
-		lease.LKAI = LKAI{NonCaptive: &LKAINonCaptive{LeaseKey: lki.Key}}
+		coseKey, err := newCOSESymmetricKey(lki.Key)
+		if err != nil {
+			clear(lki.Key)
+			return ProgradeResponse{}, err
+		}
+		lease.LKAI = LKAI{NonCaptive: &LKAINonCaptive{LeaseKey: coseKey}}
 	}
 
 	if len(req.ARINToken) > 0 {
 		lease.LeaseID = newLeaseID()
+	}
+
+	if err := s.federate(ctx, pol, req, &lease); err != nil {
+		clear(lki.Key)
+		return ProgradeResponse{}, err
 	}
 
 	return ProgradeResponse{Lease: lease}, nil
@@ -83,6 +94,20 @@ func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (Retrogr
 		return RetrogradeResponse{}, fmt.Errorf("keyserver: Retrograde: %w", err)
 	}
 
+	if req.Federation != nil {
+		if err := (cabe.LeaseFederation{OriginDomain: req.Federation.OriginDomain, FLPs: req.Federation.FLPs}).Validate(); err != nil {
+			return RetrogradeResponse{}, err
+		}
+		localID := s.federationDomainID.Load()
+		if localID == nil || req.Federation.OriginDomain != *localID {
+			fed := s.federation.Load()
+			if fed == nil {
+				return RetrogradeResponse{}, ErrInvalidRef
+			}
+			return s.foreignRetrograde(ctx, pol, fed, req, now)
+		}
+	}
+
 	repr := req.AttributeSet.Repr()
 	info, refWasCaptive, err := s.refs.UnwrapLeaseRef(ctx, req.LeaseRef, repr)
 	if err != nil {
@@ -93,7 +118,7 @@ func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (Retrogr
 		Principal:    req.Principal,
 		AttributeSet: req.AttributeSet,
 		Now:          now,
-		LeaseTime:    info.Time,
+		LeaseTime:    &info.Time,
 	})
 	if err != nil {
 		return RetrogradeResponse{}, fmt.Errorf("keyserver: Retrograde: policy: %w", err)
@@ -121,7 +146,12 @@ func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (Retrogr
 		}
 		lease.LKAI = LKAI{Captive: &LKAICaptive{LKAT: lkat}}
 	} else {
-		lease.LKAI = LKAI{NonCaptive: &LKAINonCaptive{LeaseKey: lki.Key}}
+		coseKey, err := newCOSESymmetricKey(lki.Key)
+		if err != nil {
+			clear(lki.Key)
+			return RetrogradeResponse{}, err
+		}
+		lease.LKAI = LKAI{NonCaptive: &LKAINonCaptive{LeaseKey: coseKey}}
 	}
 
 	return RetrogradeResponse{Lease: lease}, nil
@@ -195,7 +225,7 @@ func (s *Server) AssistedDecapsulate(ctx context.Context, req AssistedDecapsulat
 		Principal:    req.Principal,
 		AttributeSet: attrSet,
 		Now:          s.now().UTC(),
-		LeaseTime:    info.Time,
+		LeaseTime:    &info.Time,
 	})
 	if err != nil {
 		return AssistedDecapsulateResponse{}, fmt.Errorf("keyserver: AssistedDecapsulate: policy: %w", err)

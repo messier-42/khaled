@@ -60,7 +60,7 @@ type EncapsulateRequest struct {
 // DecapsulateRequest is the input to Engine.DecideDecapsulate. It
 // authorizes reading envelopes for an Attribute Set (CKAP Retrograde
 // / AssistedDecapsulate). LeaseTime is the authenticated wall-clock
-// issuance time of the Lease being resolved.
+// issuance time of the Lease being resolved, or nil when it is unknown.
 type DecapsulateRequest struct {
 	Principal    Principal
 	AttributeSet attrset.Set
@@ -73,7 +73,11 @@ type DecapsulateRequest struct {
 	// decapsulation is being authorized. Policies may compare
 	// LeaseTime against temporal Claims on the Principal (e.g.
 	// "deny if LeaseTime < Principal.secretGrantedTime").
-	LeaseTime time.Time
+	LeaseTime *time.Time
+
+	// Federated marks a foreign request; OriginDomain is claimed, not authenticated.
+	Federated    bool
+	OriginDomain string
 }
 
 // Decision is the output of DecideEncapsulate / DecideDecapsulate.
@@ -113,4 +117,19 @@ type Engine interface {
 
 	DecideEncapsulate(ctx context.Context, req EncapsulateRequest) (Decision, error)
 	DecideDecapsulate(ctx context.Context, req DecapsulateRequest) (Decision, error)
+}
+
+// FederateRequest authorizes releasing a Lease capability to one target Domain.
+// Local Encapsulate permission alone does not grant this authority.
+type FederateRequest struct {
+	Principal    Principal
+	AttributeSet attrset.Set
+	Now          time.Time
+	TargetDomain string
+}
+
+// FederationEngine is an optional policy capability. Engines without it deny
+// all outbound federation. Evaluation errors must never authorize release.
+type FederationEngine interface {
+	DecideFederate(ctx context.Context, req FederateRequest) (Decision, error)
 }

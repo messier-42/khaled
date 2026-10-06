@@ -291,7 +291,7 @@ func TestDecide_TemporalClaimViaContext(t *testing.T) {
 		},
 		AttributeSet: mustSet(t, nil),
 		Now:          leaseT.Add(time.Minute),
-		LeaseTime:    leaseT,
+		LeaseTime:    &leaseT,
 	})
 	if err != nil {
 		t.Fatalf("decap (allow case): %v", err)
@@ -308,7 +308,7 @@ func TestDecide_TemporalClaimViaContext(t *testing.T) {
 		},
 		AttributeSet: mustSet(t, nil),
 		Now:          leaseT.Add(2 * time.Hour),
-		LeaseTime:    leaseT,
+		LeaseTime:    &leaseT,
 	})
 	if err != nil {
 		t.Fatalf("decap (deny case): %v", err)
@@ -447,7 +447,7 @@ func TestDecide_Concurrent(t *testing.T) {
 					Principal:    policyengine.Principal{URI: uri},
 					AttributeSet: mustSet(t, nil),
 					Now:          time.Now(),
-					LeaseTime:    time.Now(),
+					LeaseTime:    new(time.Now()),
 				}
 				d, err = eng.DecideDecapsulate(context.Background(), dreq)
 				if err != nil {

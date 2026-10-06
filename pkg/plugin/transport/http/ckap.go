@@ -267,6 +267,7 @@ func handleRetrograde(hctx *ckapHandlerContext) (any, func(), error) {
 
 	resp, err := hctx.KeyServer.Retrograde(hctx.Context(), keyserver.RetrogradeRequest{
 		Principal: hctx.Principal, AttributeSet: as, LeaseRef: req.LeaseRef,
+		Federation: retroFederation(req.Federation),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -326,7 +327,7 @@ func zeroLKAICleanup(k keyserver.LKAI) func() {
 	if k.NonCaptive == nil || len(k.NonCaptive.LeaseKey) == 0 {
 		return nil
 	}
-	buf := k.NonCaptive.LeaseKey
+	buf, _ := k.NonCaptive.LeaseKey[-1].([]byte)
 	return func() { clear(buf) }
 }
 
@@ -341,6 +342,7 @@ func encodeLease(l keyserver.Lease) (ckapraw.Lease, error) {
 	}
 
 	return ckapraw.Lease{
+		Federation:   leaseFederation(l.Federation),
 		LeaseID:      l.LeaseID,
 		LeaseRef:     l.LeaseRef,
 		AttributeSet: ckapraw.FromSet(l.AttributeSet),
@@ -352,13 +354,9 @@ func encodeLease(l keyserver.Lease) (ckapraw.Lease, error) {
 func encodeLKAI(k keyserver.LKAI) (ckapraw.LKAI, error) {
 	out := ckapraw.LKAI{}
 	if k.NonCaptive != nil {
-		coseKey, err := newCOSESymmetricKey(k.NonCaptive.LeaseKey)
-		if err != nil {
-			return ckapraw.LKAI{}, err
-		}
 
 		out.NonCaptive = &ckapraw.LKAINonCaptive{
-			LeaseKey: coseKey,
+			LeaseKey: k.NonCaptive.LeaseKey,
 		}
 	}
 	if k.Captive != nil {
@@ -468,4 +466,17 @@ func writeMappedError(w stdhttp.ResponseWriter, ctx context.Context, err error) 
 		slog.ErrorContext(ctx, "ckap: internal error", "error", err)
 		writeCKAPError(ctx, w, stdhttp.StatusInternalServerError, cabe.CodeInternal, "internal error")
 	}
+}
+
+func retroFederation(f *ckapraw.RetrogradeFederation) *ckap.RetrogradeFederation {
+	if f == nil {
+		return nil
+	}
+	return &ckap.RetrogradeFederation{OriginDomain: f.OriginDomain, FLPs: f.FLPs}
+}
+func leaseFederation(f *cabe.LeaseFederation) *ckapraw.LeaseFederation {
+	if f == nil {
+		return nil
+	}
+	return &ckapraw.LeaseFederation{OriginDomain: f.OriginDomain, FLPs: f.FLPs}
 }

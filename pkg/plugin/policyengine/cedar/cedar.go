@@ -76,19 +76,36 @@ func (e *Engine) DecideEncapsulate(_ context.Context, req policyengine.Encapsula
 // DecideDecapsulate evaluates the engine's policy set for a
 // decapsulation request.
 //
-// The Cedar Context carries `now` (current wall clock) and
-// `leaseTime` (the Lease's authenticated mint time), both as Unix
-// microseconds (Long). Policies can reference them as
-// `context.now` and `context.leaseTime` — the latter is the lever
-// for temporal clearance expressions such as
-// `principal.grantedSecretClearanceAtTime <= context.leaseTime`
-// (where grantedSecretClearanceAtTime is also Unix microseconds).
+// The context includes now and, for a known local issuance time, leaseTime
+// as Unix microseconds. Foreign requests omit leaseTime and expose federated
+// and the unauthenticated claimed originDomain. Foreign evaluation errors
+// deny access, including errors in forbid expressions alongside permits.
 func (e *Engine) DecideDecapsulate(_ context.Context, req policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-	ctxRec := cedar.NewRecord(cedar.RecordMap{
-		"now":       cedar.Long(req.Now.UnixMicro()),
-		"leaseTime": cedar.Long(req.LeaseTime.UnixMicro()),
-	})
-	return e.decide(req.Principal, req.AttributeSet, actionIDDecapsulate, ctxRec)
+	fields := cedar.RecordMap{"now": cedar.Long(req.Now.UnixMicro()), "federated": cedar.Boolean(req.Federated)}
+	if req.LeaseTime != nil && !req.Federated {
+		fields["leaseTime"] = cedar.Long(req.LeaseTime.UnixMicro())
+	}
+	if req.Federated {
+		fields["originDomain"] = cedar.String(req.OriginDomain)
+	}
+	d, err := e.decide(req.Principal, req.AttributeSet, actionIDDecapsulate, cedar.NewRecord(fields))
+	if req.Federated && len(d.Diagnostics) > 0 {
+		d.Allow = false
+		d.Reason = "foreign policy evaluation failed"
+	}
+	return d, err
+}
+
+// DecideFederate independently authorizes release to one target. Evaluation
+// errors fail closed, including an erroneous forbid alongside a permit.
+func (e *Engine) DecideFederate(_ context.Context, req policyengine.FederateRequest) (policyengine.Decision, error) {
+	d, err := e.decide(req.Principal, req.AttributeSet, "Federate", cedar.NewRecord(cedar.RecordMap{
+		"now": cedar.Long(req.Now.UnixMicro()), "targetDomain": cedar.String(req.TargetDomain),
+	}))
+	if len(d.Diagnostics) > 0 {
+		return policyengine.Decision{}, errors.New("cedar: federation policy evaluation failed")
+	}
+	return d, err
 }
 
 func (e *Engine) decide(principal policyengine.Principal, as attrset.Set, actionID string, ctxRec cedar.Record) (policyengine.Decision, error) {

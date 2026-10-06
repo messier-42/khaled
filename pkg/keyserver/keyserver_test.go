@@ -21,8 +21,9 @@ import (
 // --- test helpers ---
 
 type stubEngine struct {
-	encap func(policyengine.EncapsulateRequest) (policyengine.Decision, error)
-	decap func(policyengine.DecapsulateRequest) (policyengine.Decision, error)
+	federate func(policyengine.FederateRequest) (policyengine.Decision, error)
+	encap    func(policyengine.EncapsulateRequest) (policyengine.Decision, error)
+	decap    func(policyengine.DecapsulateRequest) (policyengine.Decision, error)
 }
 
 func (e *stubEngine) DecideEncapsulate(_ context.Context, req policyengine.EncapsulateRequest) (policyengine.Decision, error) {
@@ -37,6 +38,13 @@ func (e *stubEngine) DecideDecapsulate(_ context.Context, req policyengine.Decap
 		return e.decap(req)
 	}
 	return policyengine.Decision{Allow: true}, nil
+}
+
+func (e *stubEngine) DecideFederate(_ context.Context, req policyengine.FederateRequest) (policyengine.Decision, error) {
+	if e.federate != nil {
+		return e.federate(req)
+	}
+	return policyengine.Decision{}, nil
 }
 
 func (e *stubEngine) Close() error { return nil }
@@ -163,8 +171,8 @@ func TestPrograde_NonCaptive(t *testing.T) {
 	if resp.Lease.LKAI.NonCaptive == nil || resp.Lease.LKAI.Captive != nil {
 		t.Fatal("expected non-captive LKAI")
 	}
-	if len(resp.Lease.LKAI.NonCaptive.LeaseKey) != 32 {
-		t.Fatalf("lease key len = %d, want 32", len(resp.Lease.LKAI.NonCaptive.LeaseKey))
+	if len(resp.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)) != 32 {
+		t.Fatalf("lease key len = %d, want 32", len(resp.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)))
 	}
 	if len(resp.Lease.LeaseRef) == 0 {
 		t.Fatal("LeaseRef missing")
@@ -257,7 +265,7 @@ func TestRetrograde_NonCaptiveRoundTrip(t *testing.T) {
 	if retro.Lease.LKAI.NonCaptive == nil {
 		t.Fatal("expected non-captive")
 	}
-	if !bytes.Equal(pro.Lease.LKAI.NonCaptive.LeaseKey, retro.Lease.LKAI.NonCaptive.LeaseKey) {
+	if !bytes.Equal(pro.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte), retro.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)) {
 		t.Fatal("retro LeaseKey differs from prograde LeaseKey")
 	}
 }
@@ -341,7 +349,7 @@ func TestRetrograde_PreservesLeaseAcrossRootRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Retrograde after rotation: %v", err)
 	}
-	if !bytes.Equal(pro.Lease.LKAI.NonCaptive.LeaseKey, retro.Lease.LKAI.NonCaptive.LeaseKey) {
+	if !bytes.Equal(pro.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte), retro.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)) {
 		t.Fatal("post-rotation Retrograde returned a different Lease Key")
 	}
 }
@@ -461,7 +469,7 @@ func TestRetrograde_PolicySeesLeaseTime(t *testing.T) {
 
 	var seen time.Time
 	f.engine.decap = func(req policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-		seen = req.LeaseTime
+		seen = *req.LeaseTime
 		return policyengine.Decision{Allow: true}, nil
 	}
 	if _, err := f.srv.Retrograde(ctx, keyserver.RetrogradeRequest{
@@ -616,7 +624,7 @@ func TestAdmin_AdvanceSubEpochChangesKeys(t *testing.T) {
 	post, _ := f.srv.Prograde(ctx, keyserver.ProgradeRequest{
 		Principal: f.principal, AttributeSet: as,
 	})
-	if bytes.Equal(pre.Lease.LKAI.NonCaptive.LeaseKey, post.Lease.LKAI.NonCaptive.LeaseKey) {
+	if bytes.Equal(pre.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte), post.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)) {
 		t.Fatal("subepoch advance did not change LeaseKey")
 	}
 }

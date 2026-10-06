@@ -189,7 +189,12 @@ func (t *Transport) Run(ctx context.Context) error {
 	if t.cfg.GetAuthnFunc != nil {
 		handler = httpmw.Authenticate(t.cfg.GetAuthnFunc)(handler)
 	}
-	handler = httpmw.Logging(handler)
+	// The discovery resource is public. Register its exact path outside the
+	// identity middleware; every other operation retains authentication/claims.
+	publicMux := stdhttp.NewServeMux()
+	handleRequireMethod(publicMux, stdhttp.MethodGet, "/ckap/FederationIdentity", federationIdentityHandler(t.cfg.GetKeyServerFunc))
+	publicMux.Handle("/", handler)
+	handler = httpmw.Logging(publicMux)
 
 	// TLS configuration. TLS 1.3 is required.
 	tlsCfg := &tls.Config{

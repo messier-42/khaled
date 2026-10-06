@@ -339,7 +339,7 @@ func TestCKAP_Prograde_LeaseKeyZeroedAfterResponse(t *testing.T) {
 // failure.
 func TestZeroLKAICleanup_ZeroesBackingSlice(t *testing.T) {
 	buf := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-	k := keyserver.LKAI{NonCaptive: &keyserver.LKAINonCaptive{LeaseKey: buf}}
+	k := keyserver.LKAI{NonCaptive: &keyserver.LKAINonCaptive{LeaseKey: ckapraw.COSEKey{-1: buf}}}
 	cleanup := zeroLKAICleanup(k)
 	if cleanup == nil {
 		t.Fatal("cleanup is nil for non-captive LKAI with key")
@@ -349,7 +349,7 @@ func TestZeroLKAICleanup_ZeroesBackingSlice(t *testing.T) {
 		t.Fatalf("backing slice not zeroed: %v", buf)
 	}
 	// The LKAI field still references the same backing array.
-	if !allZero(k.NonCaptive.LeaseKey) {
+	if !allZero(k.NonCaptive.LeaseKey[-1].([]byte)) {
 		t.Fatalf("LKAI.NonCaptive.LeaseKey not zeroed: %v", k.NonCaptive.LeaseKey)
 	}
 }

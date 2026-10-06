@@ -57,7 +57,7 @@ func TestStart_MintsALease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prograde: %v", err)
 	}
-	if resp.Lease.LKAI.NonCaptive == nil || len(resp.Lease.LKAI.NonCaptive.LeaseKey) != 32 {
+	if resp.Lease.LKAI.NonCaptive == nil || len(resp.Lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)) != 32 {
 		t.Fatal("expected 32-byte non-captive LeaseKey")
 	}
 }

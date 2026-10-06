@@ -26,9 +26,15 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
+	"github.com/messier-42/cabe-go/cabe"
+	"github.com/messier-42/cabe-go/ckap"
+	"github.com/messier-42/khaled/pkg/federation"
+
 	"github.com/messier-42/cabe-go/attrset"
+	"github.com/messier-42/cabe-go/ckapraw"
 	"github.com/messier-42/khaled/pkg/keyschedule"
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 	"github.com/messier-42/khaled/pkg/refwrapper"
@@ -88,13 +94,15 @@ const defaultLeaseDuration = 5 * time.Minute
 
 // Server is the per-domain CKAP orchestrator.
 type Server struct {
-	domainName    string
-	schedule      *keyschedule.Schedule
-	policy        PolicySource
-	refs          *refwrapper.Codec
-	leaseDuration time.Duration
-	now           func() time.Time
-	version       string
+	federationDomainID atomic.Pointer[string]
+	federation         atomic.Pointer[federation.Runtime]
+	domainName         string
+	schedule           *keyschedule.Schedule
+	policy             PolicySource
+	refs               *refwrapper.Codec
+	leaseDuration      time.Duration
+	now                func() time.Time
+	version            string
 }
 
 // New constructs a Server from cfg and validates it.
@@ -155,6 +163,7 @@ type ProgradeResponse struct {
 }
 
 type RetrogradeRequest struct {
+	Federation   *ckap.RetrogradeFederation
 	Principal    policyengine.Principal
 	AttributeSet attrset.Set
 	LeaseRef     []byte
@@ -196,6 +205,7 @@ type GetSelfResponse struct {
 // Lease is the Go-native view of a CKAP Lease. AttributeSet is
 // always populated.
 type Lease struct {
+	Federation   *cabe.LeaseFederation
 	LeaseRef     []byte
 	LKAI         LKAI
 	Expiry       time.Time
@@ -209,14 +219,14 @@ type LKAI struct {
 	Captive    *LKAICaptive
 }
 
-// LKAINonCaptive carries the raw Lease Key bytes that will be
-// transmitted.
+// LKAINonCaptive carries the complete COSE Lease Key, including its algorithm
+// and Base IV. Transports must preserve every parameter.
 //
 // The transport layer is responsible for zeroing the Lease Key
 // once the CBOR response bytes have been serialised and written
 // to the client.
 type LKAINonCaptive struct {
-	LeaseKey []byte
+	LeaseKey ckapraw.COSEKey
 }
 
 type LKAICaptive struct {

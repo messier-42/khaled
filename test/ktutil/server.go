@@ -32,6 +32,12 @@ import (
 	"github.com/messier-42/khaled/pkg/server"
 )
 
+const (
+	filePlugin     = "file"
+	staticPlugin   = "static"
+	pluginSelector = "use"
+)
+
 // permitAllPolicy is the Cedar policy text used when the test does not
 // override it. Mirrors doc/dev-policy.cedar — every principal, every
 // action, every resource. Inlined so harness construction does not
@@ -481,13 +487,13 @@ func buildSnapshot(in snapshotInputs) config.Snapshot {
 	clientAuthn, claims := buildAuthnAndClaims(in.Auth, in.CABundlePath)
 	return config.Snapshot{Root: config.Map{
 		"keyStorage": config.Map{
-			"use":  "disk",
-			"disk": config.Map{"path": in.KeyStorageDir},
+			pluginSelector: "disk",
+			"disk":         config.Map{"path": in.KeyStorageDir},
 		},
-		"policyEngine": config.Map{"use": "cedar"},
+		"policyEngine": config.Map{pluginSelector: "cedar"},
 		"policySource": config.Map{
-			"use":  "file",
-			"file": config.Map{"path": in.PolicyPath},
+			pluginSelector: filePlugin,
+			filePlugin:     config.Map{"path": in.PolicyPath},
 		},
 		"clientAuthn":   clientAuthn,
 		"claimsMapping": claims,
@@ -497,12 +503,12 @@ func buildSnapshot(in snapshotInputs) config.Snapshot {
 		},
 		"listeners": config.Array{
 			config.Map{
-				"use":     "http",
-				"address": "127.0.0.1:0",
+				pluginSelector: "http",
+				"address":      "127.0.0.1:0",
 				"http": config.Map{
 					"tls": config.Map{
 						"serverCertificate": config.Map{
-							"source":              "file",
+							"source":              filePlugin,
 							"certificateFilePath": in.ServerCert,
 							"keyFilePath":         in.ServerKey,
 						},
@@ -519,11 +525,11 @@ func buildSnapshot(in snapshotInputs) config.Snapshot {
 func buildAuthnAndClaims(mode authMode, caBundlePath string) (config.Map, config.Map) {
 	switch mode {
 	case authAnonymous:
-		clientAuthn := config.Map{"use": "anonymous"}
+		clientAuthn := config.Map{pluginSelector: "anonymous"}
 		// Match the anonymous plugin's DefaultURI verbatim.
 		claims := config.Map{
-			"use": "static",
-			"static": config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
 				"principals": config.Array{
 					config.Map{
 						"uri": `https://cabespec\.org/anonymous`,
@@ -537,15 +543,15 @@ func buildAuthnAndClaims(mode authMode, caBundlePath string) (config.Map, config
 		return clientAuthn, claims
 	case authMTLS:
 		clientAuthn := config.Map{
-			"use":    "tls-ca",
-			"tls-ca": config.Map{"caBundlePath": caBundlePath},
+			pluginSelector: "tls-ca",
+			"tls-ca":       config.Map{"caBundlePath": caBundlePath},
 		}
 		// Match any URI and pull it through as the principal URI.
 		// The role claim is a fixed string so tests can sanity-check
 		// the mapper actually ran.
 		claims := config.Map{
-			"use": "static",
-			"static": config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
 				"principals": config.Array{
 					config.Map{
 						"uri": `.*`,

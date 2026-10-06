@@ -11,6 +11,15 @@ import (
 	klog "github.com/messier-42/khaled/pkg/log"
 )
 
+const (
+	jsonLogFormat    = "json"
+	debugLogSeverity = "debug"
+	logFormatKey     = "format"
+	loggingKey       = "logging"
+	logSeverityKey   = "severity"
+	textLogFormat    = "text"
+)
+
 // These tests pin the precedence rules between built-in defaults,
 // CLI/env Options, and the snapshot's logging block. They exercise
 // resolveLoggingConfig directly (the same function Run and
@@ -31,7 +40,7 @@ func TestResolveLoggingConfig_BuiltinDefaultsWhenNothingSet(t *testing.T) {
 
 func TestResolveLoggingConfig_OptionsFillEmptyConfig(t *testing.T) {
 	cfg, err := resolveLoggingConfig(config.Snapshot{Root: config.Map{}}, Options{
-		LogFormat:   "text",
+		LogFormat:   textLogFormat,
 		LogSeverity: "info",
 	})
 	if err != nil {
@@ -47,14 +56,14 @@ func TestResolveLoggingConfig_OptionsFillEmptyConfig(t *testing.T) {
 
 func TestResolveLoggingConfig_ConfigFileWinsOverOptions(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"logging": config.Map{
-			"format":   "json",
-			"severity": "warn",
+		loggingKey: config.Map{
+			logFormatKey:   jsonLogFormat,
+			logSeverityKey: "warn",
 		},
 	}}
 	cfg, err := resolveLoggingConfig(snap, Options{
-		LogFormat:   "text",
-		LogSeverity: "debug",
+		LogFormat:   textLogFormat,
+		LogSeverity: debugLogSeverity,
 	})
 	if err != nil {
 		t.Fatalf("resolveLoggingConfig: %v", err)
@@ -71,9 +80,9 @@ func TestResolveLoggingConfig_PartialConfigBlocksOptionsField(t *testing.T) {
 	// Config sets severity only; CLI sets format only. Each wins
 	// its own field — the unset fields fall back independently.
 	snap := config.Snapshot{Root: config.Map{
-		"logging": config.Map{"severity": "debug"},
+		loggingKey: config.Map{logSeverityKey: debugLogSeverity},
 	}}
-	cfg, err := resolveLoggingConfig(snap, Options{LogFormat: "text"})
+	cfg, err := resolveLoggingConfig(snap, Options{LogFormat: textLogFormat})
 	if err != nil {
 		t.Fatalf("resolveLoggingConfig: %v", err)
 	}
@@ -90,15 +99,15 @@ func TestResolveLoggingConfig_PartialConfigBlocksOptionsField(t *testing.T) {
 // time when a reload arrives.
 func TestRunReapliesLoggerOnSuccessfulReload(t *testing.T) {
 	initial := config.Snapshot{Root: config.Map{
-		"logging": config.Map{
-			"format":   "json",
-			"severity": "error",
+		loggingKey: config.Map{
+			logFormatKey:   jsonLogFormat,
+			logSeverityKey: "error",
 		},
 	}}
 	reloaded := config.Snapshot{Root: config.Map{
-		"logging": config.Map{
-			"format":   "text",
-			"severity": "debug",
+		loggingKey: config.Map{
+			logFormatKey:   textLogFormat,
+			logSeverityKey: debugLogSeverity,
 		},
 	}}
 
@@ -147,9 +156,9 @@ func TestRunReapliesLoggerOnSuccessfulReload(t *testing.T) {
 // retained.
 func TestRunKeepsLoggerOnFailedReload(t *testing.T) {
 	initial := config.Snapshot{Root: config.Map{
-		"logging": config.Map{
-			"format":   "json",
-			"severity": "warn",
+		loggingKey: config.Map{
+			logFormatKey:   jsonLogFormat,
+			logSeverityKey: "warn",
 		},
 	}}
 	source := &fakeConfigSource{currentSnap: initial, updates: make(chan error, 1)}

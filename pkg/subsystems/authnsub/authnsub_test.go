@@ -8,6 +8,13 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
+const (
+	pluginSelector  = "use"
+	anonymousPlugin = "anonymous"
+	clientAuthnKey  = "clientAuthn"
+	principalURIKey = "uri"
+)
+
 func TestStartTolerantOfMissingBlock(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{}}
 	m, err := New(snap, nil)
@@ -22,7 +29,7 @@ func TestStartTolerantOfMissingBlock(t *testing.T) {
 
 func TestStartTLSSpiffeRequiresSharedSource(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn": config.Map{"use": "tls-spiffe"},
+		clientAuthnKey: config.Map{pluginSelector: "tls-spiffe"},
 	}}
 	_, err := New(snap, nil)
 	if err == nil {
@@ -48,7 +55,7 @@ func TestManagerReconcileRejectsUnsupportedPlugin(t *testing.T) {
 	defer func() { _ = m.Stop() }()
 
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn": config.Map{"use": "ftp-kerberos"},
+		clientAuthnKey: config.Map{pluginSelector: "ftp-kerberos"},
 	}}
 	if err := m.Reconcile(context.Background(), snap); err == nil {
 		t.Fatalf("expected unknown plugin to fail")
@@ -57,10 +64,10 @@ func TestManagerReconcileRejectsUnsupportedPlugin(t *testing.T) {
 
 func TestStartAnonymous(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn": config.Map{
-			"use": "anonymous",
-			"anonymous": config.Map{
-				"uri": "https://example.test/anon",
+		clientAuthnKey: config.Map{
+			pluginSelector: anonymousPlugin,
+			anonymousPlugin: config.Map{
+				principalURIKey: "https://example.test/anon",
 			},
 		},
 	}}
@@ -78,7 +85,7 @@ func TestStartAnonymousWithoutURI(t *testing.T) {
 	// Omitting the anonymous subblock is valid — the plugin substitutes
 	// its DefaultURI.
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn": config.Map{"use": "anonymous"},
+		clientAuthnKey: config.Map{pluginSelector: anonymousPlugin},
 	}}
 	m, err := New(snap, nil)
 	if err != nil {
@@ -92,10 +99,10 @@ func TestStartAnonymousWithoutURI(t *testing.T) {
 
 func TestManagerReconcileRebuildsOnAnonymousURIChange(t *testing.T) {
 	snap1 := config.Snapshot{Root: config.Map{
-		"clientAuthn": config.Map{
-			"use": "anonymous",
-			"anonymous": config.Map{
-				"uri": "https://example.test/one",
+		clientAuthnKey: config.Map{
+			pluginSelector: anonymousPlugin,
+			anonymousPlugin: config.Map{
+				principalURIKey: "https://example.test/one",
 			},
 		},
 	}}
@@ -107,10 +114,10 @@ func TestManagerReconcileRebuildsOnAnonymousURIChange(t *testing.T) {
 	first := m.Current()
 
 	snap2 := config.Snapshot{Root: config.Map{
-		"clientAuthn": config.Map{
-			"use": "anonymous",
-			"anonymous": config.Map{
-				"uri": "https://example.test/two",
+		clientAuthnKey: config.Map{
+			pluginSelector: anonymousPlugin,
+			anonymousPlugin: config.Map{
+				principalURIKey: "https://example.test/two",
 			},
 		},
 	}}

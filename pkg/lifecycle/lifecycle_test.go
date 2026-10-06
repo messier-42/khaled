@@ -11,6 +11,8 @@ import (
 	"github.com/messier-42/khaled/pkg/lifecycle"
 )
 
+const fakeComponentName = "fake"
+
 type fakeArgs struct {
 	Name string
 	Knob int
@@ -29,7 +31,7 @@ func (p *fakePlugin) Close() error {
 
 // parseSnap is the "per-subsystem" parse; lifecycle no longer owns it.
 func parseSnap(snap config.Snapshot) fakeArgs {
-	m, _ := snap.Root.GetMap("fake")
+	m, _ := snap.Root.GetMap(fakeComponentName)
 	name, _ := m.GetString("name")
 	knob := 0
 	if knobV, _ := m.Get("knob"); knobV != nil {
@@ -46,7 +48,7 @@ func parseSnap(snap config.Snapshot) fakeArgs {
 func buildSpec(t *testing.T, sink *[]*fakePlugin) lifecycle.Spec[*fakePlugin] {
 	t.Helper()
 	return lifecycle.Spec[*fakePlugin]{
-		Name: "fake",
+		Name: fakeComponentName,
 		Apply: func(_ context.Context, old *fakePlugin, oldSnap, newSnap config.Snapshot) (*fakePlugin, error) {
 			newArgs := parseSnap(newSnap)
 			if newArgs.Name == "" {
@@ -65,7 +67,7 @@ func buildSpec(t *testing.T, sink *[]*fakePlugin) lifecycle.Spec[*fakePlugin] {
 
 func snap(name string, knob int) config.Snapshot {
 	return config.Snapshot{Root: config.Map{
-		"fake": config.Map{
+		fakeComponentName: config.Map{
 			"name": name,
 			"knob": int64(knob),
 		},
@@ -162,7 +164,7 @@ func TestManager_ReconcileRebuildsOnArgsChange(t *testing.T) {
 func TestManager_StartPropagatesApplyError(t *testing.T) {
 	boom := errors.New("boom")
 	spec := lifecycle.Spec[*fakePlugin]{
-		Name: "fake",
+		Name: fakeComponentName,
 		Apply: func(context.Context, *fakePlugin, config.Snapshot, config.Snapshot) (*fakePlugin, error) {
 			return nil, boom
 		},
@@ -180,7 +182,7 @@ func TestManager_ReconcileApplyErrorRetainsOld(t *testing.T) {
 	boom := errors.New("apply-boom")
 	failAfterFirst := false
 	spec := lifecycle.Spec[*fakePlugin]{
-		Name: "fake",
+		Name: fakeComponentName,
 		Apply: func(_ context.Context, old *fakePlugin, _, newSnap config.Snapshot) (*fakePlugin, error) {
 			if failAfterFirst {
 				return nil, boom
@@ -296,7 +298,7 @@ func TestManager_NewEmptyIsUsable(t *testing.T) {
 func TestManager_ApplyCanAbsorbReturnOld(t *testing.T) {
 	var built []*fakePlugin
 	absorbSpec := lifecycle.Spec[*fakePlugin]{
-		Name: "fake",
+		Name: fakeComponentName,
 		Apply: func(_ context.Context, old *fakePlugin, _, newSnap config.Snapshot) (*fakePlugin, error) {
 			if old != nil {
 				return old, nil // absorb changes silently

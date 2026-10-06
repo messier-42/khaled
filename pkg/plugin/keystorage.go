@@ -11,6 +11,8 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/keystorage/disk"
 )
 
+const schemaTypeString = "string"
+
 // KeyStorageArgs provides information used to instantiate a key
 // storage plugin.
 type KeyStorageArgs struct {
@@ -46,9 +48,9 @@ func RegisterKeyStorageSchemas(r *schema.Registry) error {
 		name   string
 		schema *jsonschema.Schema
 	}{
-		{"domainName", &jsonschema.Schema{Type: "string", MinLength: &minOne}},
-		{"rootRotationInterval", &jsonschema.Schema{Type: "string", MinLength: &minOne}},
-		{"leaseDuration", &jsonschema.Schema{Type: "string", MinLength: &minOne}},
+		{"domainName", &jsonschema.Schema{Type: schemaTypeString, MinLength: &minOne}},
+		{"rootRotationInterval", &jsonschema.Schema{Type: schemaTypeString, MinLength: &minOne}},
+		{"leaseDuration", &jsonschema.Schema{Type: schemaTypeString, MinLength: &minOne}},
 	}
 	for _, c := range commons {
 		if err := r.RegisterPluginKindCommon("keyStorage", c.name, c.schema); err != nil {

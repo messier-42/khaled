@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewClaimsMapperRejectsUnknown(t *testing.T) {
-	_, err := plugin.NewClaimsMapper(context.Background(), plugin.ClaimsMapperArgs{PluginName: "bogus"})
+	_, err := plugin.NewClaimsMapper(context.Background(), plugin.ClaimsMapperArgs{PluginName: unknownPlugin})
 	if err == nil {
 		t.Fatalf("expected unknown plugin name to fail")
 	}

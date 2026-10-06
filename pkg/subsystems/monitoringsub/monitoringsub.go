@@ -147,15 +147,13 @@ func New(ctx context.Context, cfg Config, readyFunc ReadyFunc) (*Running, error)
 		server:   srv,
 	}
 
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		// Serve returns ErrServerClosed on a clean Stop; any other
 		// error is unexpected for a plaintext listener.
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, stdhttp.ErrServerClosed) {
 			r.closeErr = err
 		}
-	}()
+	})
 
 	return r, nil
 }

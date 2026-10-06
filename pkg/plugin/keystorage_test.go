@@ -8,13 +8,13 @@ import (
 )
 
 func TestNewKeyStorage_UnknownPlugin(t *testing.T) {
-	if _, err := plugin.NewKeyStorage(t.Context(), plugin.KeyStorageArgs{PluginName: "bogus"}); err == nil {
+	if _, err := plugin.NewKeyStorage(t.Context(), plugin.KeyStorageArgs{PluginName: unknownPlugin}); err == nil {
 		t.Fatalf("expected error for unknown plugin")
 	}
 }
 
 func TestNewKeyStorage_Disk(t *testing.T) {
-	args := plugin.KeyStorageArgs{PluginName: "disk"}
+	args := plugin.KeyStorageArgs{PluginName: diskPlugin}
 	args.Disk.Path = t.TempDir()
 
 	store, err := plugin.NewKeyStorage(t.Context(), args)
@@ -29,7 +29,7 @@ func TestNewKeyStorage_Disk(t *testing.T) {
 }
 
 func TestNewKeyStorage_DiskBadPath(t *testing.T) {
-	args := plugin.KeyStorageArgs{PluginName: "disk"}
+	args := plugin.KeyStorageArgs{PluginName: diskPlugin}
 	args.Disk.Path = "/nonexistent/khaled-keystorage-test"
 	if _, err := plugin.NewKeyStorage(t.Context(), args); err == nil {
 		t.Fatalf("expected error for nonexistent path")

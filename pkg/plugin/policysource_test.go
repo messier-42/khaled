@@ -23,7 +23,7 @@ func writePolicy(t *testing.T, content string) string {
 }
 
 func TestNewPolicySource_UnknownSource(t *testing.T) {
-	args := plugin.PolicySourceArgs{PluginName: "bogus", EngineName: "cedar"}
+	args := plugin.PolicySourceArgs{PluginName: unknownPlugin, EngineName: cedarEngine}
 	if _, err := plugin.NewPolicySource(t.Context(), args); err == nil {
 		t.Fatalf("expected error for unknown source")
 	}
@@ -31,7 +31,7 @@ func TestNewPolicySource_UnknownSource(t *testing.T) {
 
 func TestNewPolicySource_UnknownEngine(t *testing.T) {
 	path := writePolicy(t, samplePolicy)
-	args := plugin.PolicySourceArgs{PluginName: "file", EngineName: "bogus"}
+	args := plugin.PolicySourceArgs{PluginName: fileSource, EngineName: unknownPlugin}
 	args.File.Path = path
 	if _, err := plugin.NewPolicySource(t.Context(), args); err == nil {
 		t.Fatalf("expected error for unknown engine")
@@ -40,7 +40,7 @@ func TestNewPolicySource_UnknownEngine(t *testing.T) {
 
 func TestNewPolicySource_MissingEngineName(t *testing.T) {
 	path := writePolicy(t, samplePolicy)
-	args := plugin.PolicySourceArgs{PluginName: "file"}
+	args := plugin.PolicySourceArgs{PluginName: fileSource}
 	args.File.Path = path
 	if _, err := plugin.NewPolicySource(t.Context(), args); err == nil {
 		t.Fatalf("expected error for missing engine name")
@@ -49,7 +49,7 @@ func TestNewPolicySource_MissingEngineName(t *testing.T) {
 
 func TestNewPolicySource_FileCedar(t *testing.T) {
 	path := writePolicy(t, samplePolicy)
-	args := plugin.PolicySourceArgs{PluginName: "file", EngineName: "cedar"}
+	args := plugin.PolicySourceArgs{PluginName: fileSource, EngineName: cedarEngine}
 	args.File.Path = path
 
 	src, err := plugin.NewPolicySource(t.Context(), args)
@@ -81,7 +81,7 @@ func TestNewPolicySource_FileCedar(t *testing.T) {
 
 func TestNewPolicySource_FileCedarInvalid(t *testing.T) {
 	path := writePolicy(t, "not cedar syntax")
-	args := plugin.PolicySourceArgs{PluginName: "file", EngineName: "cedar"}
+	args := plugin.PolicySourceArgs{PluginName: fileSource, EngineName: cedarEngine}
 	args.File.Path = path
 
 	src, err := plugin.NewPolicySource(t.Context(), args)

@@ -20,17 +20,23 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
-const cedarEngine = "cedar"
+const (
+	cedarConfigYAML   = "policyEngine:\n  use: cedar\n"
+	testNamespace     = "test-ns"
+	yamlConfigKey     = "khaled.yaml"
+	testConfigMapName = "test-config"
+	cedarEngine       = "cedar"
+)
 
 func TestCurrentLoadsFromConfigMapYAMLData(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: cedar\n",
+			yamlConfigKey: cedarConfigYAML,
 		},
 	})
 
-	source, err := newWithClient(context.Background(), client, "configmap/test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, "configmap/test-config", testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -63,13 +69,13 @@ func TestCurrentLoadsFromConfigMapBinaryCBOR(t *testing.T) {
 	}
 
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		BinaryData: map[string][]byte{
 			"khaled.cbor": payload,
 		},
 	})
 
-	source, err := newWithClient(context.Background(), client, "test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, testConfigMapName, testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -95,16 +101,16 @@ func TestCurrentLoadsFromConfigMapBinaryCBOR(t *testing.T) {
 
 func TestCurrentRejectsConfigMapWithMultipleConfigEntries(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: yaml\n",
+			yamlConfigKey: "policyEngine:\n  use: yaml\n",
 		},
 		BinaryData: map[string][]byte{
 			"khaled.cbor": {0xa1},
 		},
 	})
 
-	source, err := newWithClient(context.Background(), client, "test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, testConfigMapName, testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -120,13 +126,13 @@ func TestCurrentRejectsConfigMapWithMultipleConfigEntries(t *testing.T) {
 
 func TestCurrentKeepsLastGoodConfigAfterInvalidWatchUpdate(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: cedar\n",
+			yamlConfigKey: cedarConfigYAML,
 		},
 	})
 
-	source, err := newWithClient(context.Background(), client, "test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, testConfigMapName, testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -136,12 +142,12 @@ func TestCurrentKeepsLastGoodConfigAfterInvalidWatchUpdate(t *testing.T) {
 	})
 
 	updated := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "{\n",
+			yamlConfigKey: "{\n",
 		},
 	}
-	if err := client.Tracker().Update(configMapGVR(), updated, "test-ns"); err != nil {
+	if err := client.Tracker().Update(configMapGVR(), updated, testNamespace); err != nil {
 		t.Fatalf("update tracker: %v", err)
 	}
 	watcher.Modify(updated)
@@ -165,13 +171,13 @@ func TestCurrentKeepsLastGoodConfigAfterInvalidWatchUpdate(t *testing.T) {
 
 func TestCurrentAppliesValidWatchUpdate(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: cedar\n",
+			yamlConfigKey: cedarConfigYAML,
 		},
 	})
 
-	source, err := newWithClient(context.Background(), client, "test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, testConfigMapName, testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -181,12 +187,12 @@ func TestCurrentAppliesValidWatchUpdate(t *testing.T) {
 	})
 
 	updated := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: updated\n",
+			yamlConfigKey: "policyEngine:\n  use: updated\n",
 		},
 	}
-	if err := client.Tracker().Update(configMapGVR(), updated, "test-ns"); err != nil {
+	if err := client.Tracker().Update(configMapGVR(), updated, testNamespace); err != nil {
 		t.Fatalf("update tracker: %v", err)
 	}
 	watcher.Modify(updated)
@@ -210,9 +216,9 @@ func TestCurrentAppliesValidWatchUpdate(t *testing.T) {
 
 func TestValidateFuncRejectingInitialLoadProducesStartupError(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: cedar\n",
+			yamlConfigKey: cedarConfigYAML,
 		},
 	})
 
@@ -223,7 +229,7 @@ func TestValidateFuncRejectingInitialLoadProducesStartupError(t *testing.T) {
 		return errors.New("nope")
 	}
 
-	source, err := newWithClient(context.Background(), client, "configmap/test-config", "test-ns", validate)
+	source, err := newWithClient(context.Background(), client, "configmap/test-config", testNamespace, validate)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -243,9 +249,9 @@ func TestValidateFuncRejectingInitialLoadProducesStartupError(t *testing.T) {
 
 func TestValidateFuncRejectingReloadKeepsLastGoodConfig(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: cedar\n",
+			yamlConfigKey: cedarConfigYAML,
 		},
 	})
 
@@ -257,7 +263,7 @@ func TestValidateFuncRejectingReloadKeepsLastGoodConfig(t *testing.T) {
 		return nil
 	}
 
-	source, err := newWithClient(context.Background(), client, "configmap/test-config", "test-ns", validate)
+	source, err := newWithClient(context.Background(), client, "configmap/test-config", testNamespace, validate)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -268,12 +274,12 @@ func TestValidateFuncRejectingReloadKeepsLastGoodConfig(t *testing.T) {
 
 	rejectReload.Store(true)
 	updated := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
 		Data: map[string]string{
-			"khaled.yaml": "policyEngine:\n  use: updated\n",
+			yamlConfigKey: "policyEngine:\n  use: updated\n",
 		},
 	}
-	if err := client.Tracker().Update(configMapGVR(), updated, "test-ns"); err != nil {
+	if err := client.Tracker().Update(configMapGVR(), updated, testNamespace); err != nil {
 		t.Fatalf("update tracker: %v", err)
 	}
 	watcher.Modify(updated)
@@ -299,8 +305,8 @@ func TestValidateFuncRejectingReloadKeepsLastGoodConfig(t *testing.T) {
 // exiting permanently.
 func TestWatchReconnectsAfterTransientError(t *testing.T) {
 	client := fake.NewSimpleClientset(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
+		Data:       map[string]string{yamlConfigKey: cedarConfigYAML},
 	})
 
 	// First two Watch calls fail; subsequent calls return a working
@@ -317,7 +323,7 @@ func TestWatchReconnectsAfterTransientError(t *testing.T) {
 
 	// Tight backoff so the test completes quickly. Passed directly to
 	// the Source at construction so tests do not mutate shared state.
-	source, err := newWithClientOpts(context.Background(), client, "configmap/test-config", "test-ns", nil, backoff.Config{
+	source, err := newWithClientOpts(context.Background(), client, "configmap/test-config", testNamespace, nil, backoff.Config{
 		Initial: 5 * time.Millisecond,
 		Max:     20 * time.Millisecond,
 		Jitter:  0,
@@ -346,10 +352,10 @@ func TestWatchReconnectsAfterTransientError(t *testing.T) {
 	// Now the third Watch call should have succeeded. Fire a modify
 	// event and verify reload+update.
 	updatedMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar-new\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
+		Data:       map[string]string{yamlConfigKey: "policyEngine:\n  use: cedar-new\n"},
 	}
-	if _, err := client.CoreV1().ConfigMaps("test-ns").Update(context.Background(), updatedMap, metav1.UpdateOptions{}); err != nil {
+	if _, err := client.CoreV1().ConfigMaps(testNamespace).Update(context.Background(), updatedMap, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("update configmap: %v", err)
 	}
 	watcher.Modify(updatedMap)
@@ -375,7 +381,7 @@ func TestInitialLoadFailsWhenConfigMapMissing(t *testing.T) {
 		return true, watcher, nil
 	})
 
-	source, err := newWithClient(context.Background(), client, "configmap/test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, "configmap/test-config", testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -395,10 +401,10 @@ func TestInitialLoadFailsWhenConfigMapMissing(t *testing.T) {
 	// Now create the ConfigMap; a watch Added event should drive a
 	// reload and Current() should start succeeding.
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
+		Data:       map[string]string{yamlConfigKey: cedarConfigYAML},
 	}
-	if _, err := client.CoreV1().ConfigMaps("test-ns").Create(context.Background(), cm, metav1.CreateOptions{}); err != nil {
+	if _, err := client.CoreV1().ConfigMaps(testNamespace).Create(context.Background(), cm, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("create configmap: %v", err)
 	}
 	watcher.Add(cm)
@@ -425,11 +431,11 @@ func TestInitialLoadFailsWhenConfigMapMissing(t *testing.T) {
 // API-server round-trips for nothing.
 func TestWatchBookmarkIgnored(t *testing.T) {
 	client, watcher := newFakeClientWithWatch(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
+		Data:       map[string]string{yamlConfigKey: cedarConfigYAML},
 	})
 
-	source, err := newWithClient(context.Background(), client, "configmap/test-config", "test-ns", nil)
+	source, err := newWithClient(context.Background(), client, "configmap/test-config", testNamespace, nil)
 	if err != nil {
 		t.Fatalf("new source: %v", err)
 	}
@@ -447,8 +453,8 @@ func TestWatchBookmarkIgnored(t *testing.T) {
 	// initial) is carried as the payload; the source should ignore
 	// the event entirely.
 	watcher.Action(watch.Bookmark, &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns", ResourceVersion: "99"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace, ResourceVersion: "99"},
+		Data:       map[string]string{yamlConfigKey: cedarConfigYAML},
 	})
 
 	// No update notification should fire.
@@ -465,8 +471,8 @@ func TestWatchBookmarkIgnored(t *testing.T) {
 // The reconnected watcher must pick up subsequent ConfigMap changes.
 func TestWatchErrorTriggersReconnect(t *testing.T) {
 	client := fake.NewSimpleClientset(&corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
+		Data:       map[string]string{yamlConfigKey: cedarConfigYAML},
 	})
 
 	firstWatcher := watch.NewFake()
@@ -480,7 +486,7 @@ func TestWatchErrorTriggersReconnect(t *testing.T) {
 		return true, secondWatcher, nil
 	})
 
-	source, err := newWithClientOpts(context.Background(), client, "configmap/test-config", "test-ns", nil, backoff.Config{
+	source, err := newWithClientOpts(context.Background(), client, "configmap/test-config", testNamespace, nil, backoff.Config{
 		Initial: 5 * time.Millisecond,
 		Max:     20 * time.Millisecond,
 		Jitter:  0,
@@ -511,10 +517,10 @@ func TestWatchErrorTriggersReconnect(t *testing.T) {
 	// Verify the reconnected watcher drives reloads. Push a Modify
 	// event through secondWatcher and assert the Source picks it up.
 	updated := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
-		Data:       map[string]string{"khaled.yaml": "policyEngine:\n  use: cedar-new\n"},
+		ObjectMeta: metav1.ObjectMeta{Name: testConfigMapName, Namespace: testNamespace},
+		Data:       map[string]string{yamlConfigKey: "policyEngine:\n  use: cedar-new\n"},
 	}
-	if _, err := client.CoreV1().ConfigMaps("test-ns").Update(context.Background(), updated, metav1.UpdateOptions{}); err != nil {
+	if _, err := client.CoreV1().ConfigMaps(testNamespace).Update(context.Background(), updated, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("update configmap: %v", err)
 	}
 	secondWatcher.Modify(updated)

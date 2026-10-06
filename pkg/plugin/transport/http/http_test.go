@@ -29,6 +29,14 @@ import (
 	"github.com/messier-42/khaled/pkg/x509source"
 )
 
+const (
+	addressKey        = "address"
+	pluginSelector    = "use"
+	testListenAddress = ":5000"
+	httpTransport     = "http"
+	httpsScheme       = "https"
+)
+
 // freePort asks the kernel for an available localhost TCP port,
 // closes the probe socket, and returns the address string.
 func freePort(ctx context.Context) (string, error) {
@@ -182,7 +190,7 @@ func TestRunServesAndReturns404(t *testing.T) {
 		Timeout: 5 * time.Second,
 	}
 
-	u := url.URL{Scheme: "https", Host: addr, Path: "/anything"}
+	u := url.URL{Scheme: httpsScheme, Host: addr, Path: "/anything"}
 	var resp *stdhttp.Response
 	for range 50 {
 		req, _ := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, u.String(), nil)
@@ -274,7 +282,7 @@ func TestRunLogsReceiveAndCompletion(t *testing.T) {
 		Timeout: 5 * time.Second,
 	}
 
-	u := url.URL{Scheme: "https", Host: addr, Path: "/integration"}
+	u := url.URL{Scheme: httpsScheme, Host: addr, Path: "/integration"}
 	var resp *stdhttp.Response
 	for range 50 {
 		req, _ := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, u.String(), nil)
@@ -364,7 +372,7 @@ func TestKeyLogFileIsAppended(t *testing.T) {
 		},
 		Timeout: 5 * time.Second,
 	}
-	u := url.URL{Scheme: "https", Host: addr, Path: "/"}
+	u := url.URL{Scheme: httpsScheme, Host: addr, Path: "/"}
 	for range 50 {
 		req, _ := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, u.String(), nil)
 		resp, err := client.Do(req)
@@ -389,9 +397,9 @@ func TestKeyLogFileIsAppended(t *testing.T) {
 
 func TestConfigFromSnapshotFileSource(t *testing.T) {
 	entry := config.Map{
-		"use":     "http",
-		"address": ":5000",
-		"http": config.Map{
+		pluginSelector: httpTransport,
+		addressKey:     testListenAddress,
+		httpTransport: config.Map{
 			"tls": config.Map{
 				"keylog": "/tmp/kl",
 				"serverCertificate": config.Map{
@@ -407,7 +415,7 @@ func TestConfigFromSnapshotFileSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	if cfg.Address != ":5000" {
+	if cfg.Address != testListenAddress {
 		t.Errorf("address = %q, want :5000", cfg.Address)
 	}
 	if got := httpt.KeyLogPathFromSnapshot(entry); got != "/tmp/kl" {
@@ -427,9 +435,9 @@ func TestConfigFromSnapshotFileSource(t *testing.T) {
 
 func TestConfigFromSnapshotSPIFFESourcePullsSocketFromRoot(t *testing.T) {
 	entry := config.Map{
-		"use":     "http",
-		"address": ":5000",
-		"http": config.Map{
+		pluginSelector: httpTransport,
+		addressKey:     testListenAddress,
+		httpTransport: config.Map{
 			"tls": config.Map{
 				"serverCertificate": config.Map{
 					"source": "spiffe",
@@ -452,7 +460,7 @@ func TestConfigFromSnapshotSPIFFESourcePullsSocketFromRoot(t *testing.T) {
 }
 
 func TestConfigFromSnapshotRequiresAddress(t *testing.T) {
-	entry := config.Map{"use": "http"}
+	entry := config.Map{pluginSelector: httpTransport}
 	if _, err := httpt.ConfigFromSnapshot(entry, config.Map{}); err == nil {
 		t.Fatalf("expected missing address to fail")
 	}
@@ -460,9 +468,9 @@ func TestConfigFromSnapshotRequiresAddress(t *testing.T) {
 
 func TestConfigFromSnapshotShutdownGraceTime(t *testing.T) {
 	entry := config.Map{
-		"use":     "http",
-		"address": ":5000",
-		"http":    config.Map{"shutdownGraceTime": "7s"},
+		pluginSelector: httpTransport,
+		addressKey:     testListenAddress,
+		httpTransport:  config.Map{"shutdownGraceTime": "7s"},
 	}
 	cfg, err := httpt.ConfigFromSnapshot(entry, config.Map{})
 	if err != nil {
@@ -475,7 +483,7 @@ func TestConfigFromSnapshotShutdownGraceTime(t *testing.T) {
 
 func TestConfigFromSnapshotUnsetShutdownGraceTimeLeavesZero(t *testing.T) {
 	// Unset leaves the field zero so New applies DefaultShutdownGraceTime.
-	entry := config.Map{"use": "http", "address": ":5000"}
+	entry := config.Map{pluginSelector: httpTransport, addressKey: testListenAddress}
 	cfg, err := httpt.ConfigFromSnapshot(entry, config.Map{})
 	if err != nil {
 		t.Fatalf("config: %v", err)
@@ -487,9 +495,9 @@ func TestConfigFromSnapshotUnsetShutdownGraceTimeLeavesZero(t *testing.T) {
 
 func TestConfigFromSnapshotRejectsBadShutdownGraceTime(t *testing.T) {
 	entry := config.Map{
-		"use":     "http",
-		"address": ":5000",
-		"http":    config.Map{"shutdownGraceTime": "not-a-duration"},
+		pluginSelector: httpTransport,
+		addressKey:     testListenAddress,
+		httpTransport:  config.Map{"shutdownGraceTime": "not-a-duration"},
 	}
 	if _, err := httpt.ConfigFromSnapshot(entry, config.Map{}); err == nil {
 		t.Fatalf("expected bad shutdownGraceTime to fail")
@@ -498,8 +506,8 @@ func TestConfigFromSnapshotRejectsBadShutdownGraceTime(t *testing.T) {
 
 func TestCertConfigFromSnapshotDefaultsSourceToFile(t *testing.T) {
 	entry := config.Map{
-		"use":     "http",
-		"address": ":1",
+		pluginSelector: httpTransport,
+		addressKey:     ":1",
 	}
 	certCfg := httpt.CertConfigFromSnapshot(entry, config.Map{})
 	if certCfg.Kind != x509source.KindFile {

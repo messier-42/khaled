@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 	"log/slog"
+	"slices"
 )
 
 // ctxKey is the internal type used as a key to store log attributes
@@ -72,12 +73,12 @@ func RequestID(ctx context.Context) (string, bool) {
 
 func getStrAttr(ctx context.Context, attrName string) (string, bool) {
 	attrs := getAttrs(ctx)
-	for i := len(attrs) - 1; i >= 0; i-- {
-		if attrs[i].Key == attrName {
-			if s, ok := attrs[i].Value.Any().(string); ok {
+	for _, attr := range slices.Backward(attrs) {
+		if attr.Key == attrName {
+			if s, ok := attr.Value.Any().(string); ok {
 				return s, true
 			}
-			return attrs[i].Value.String(), true
+			return attr.Value.String(), true
 		}
 	}
 	return "", false

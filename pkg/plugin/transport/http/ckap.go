@@ -354,7 +354,6 @@ func encodeLease(l keyserver.Lease) (ckapraw.Lease, error) {
 func encodeLKAI(k keyserver.LKAI) (ckapraw.LKAI, error) {
 	out := ckapraw.LKAI{}
 	if k.NonCaptive != nil {
-
 		out.NonCaptive = &ckapraw.LKAINonCaptive{
 			LeaseKey: k.NonCaptive.LeaseKey,
 		}
@@ -372,8 +371,7 @@ func decodeCBOR(w stdhttp.ResponseWriter, r *stdhttp.Request, v any) error {
 	r.Body = stdhttp.MaxBytesReader(w, r.Body, maxCKAPReqLen)
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		var mberr *stdhttp.MaxBytesError
-		if errors.As(err, &mberr) {
+		if _, ok := errors.AsType[*stdhttp.MaxBytesError](err); ok {
 			return &ckap.Error{
 				Code:    cabe.CodeRequestTooLarge,
 				Summary: "request body too large",
@@ -444,8 +442,7 @@ func httpStatusForCode(c cabe.Code) int {
 // Failing that, certain sentinel errors are translated into a fresh
 // *ckap.Error. Anything else is treated as an internal error.
 func writeMappedError(w stdhttp.ResponseWriter, ctx context.Context, err error) {
-	var ce *ckap.Error
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*ckap.Error](err); ok {
 		slog.InfoContext(ctx, "ckap: handler rejected request",
 			"code", ce.Code,
 			"op", ce.Op,

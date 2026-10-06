@@ -7,6 +7,15 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
+const (
+	pathKey              = "path"
+	testStoragePath      = "/tmp"
+	diskPlugin           = "disk"
+	filePlugin           = "file"
+	k8sAttestationPlugin = "k8s-attestation"
+	pluginSelector       = "use"
+)
+
 // TestKeyStorageRuntimeKnobsValidate ensures the new domainName /
 // rootRotationInterval / leaseDuration common knobs accept valid
 // values and reject the wrong type.
@@ -17,18 +26,18 @@ func TestKeyStorageRuntimeKnobsValidate(t *testing.T) {
 	}
 	base := func() map[string]any {
 		return map[string]any{
-			"policyEngine":  map[string]any{"use": "cedar"},
-			"policySource":  map[string]any{"use": "file", "file": map[string]any{"path": "/tmp/x"}},
-			"clientAuthn":   map[string]any{"use": "tls-spiffe"},
-			"claimsMapping": map[string]any{"use": "k8s-attestation"},
-			"listeners":     []any{map[string]any{"use": "http", "address": ":0"}},
+			"policyEngine":  map[string]any{pluginSelector: "cedar"},
+			"policySource":  map[string]any{pluginSelector: filePlugin, filePlugin: map[string]any{pathKey: "/tmp/x"}},
+			"clientAuthn":   map[string]any{pluginSelector: "tls-spiffe"},
+			"claimsMapping": map[string]any{pluginSelector: k8sAttestationPlugin},
+			"listeners":     []any{map[string]any{pluginSelector: "http", "address": ":0"}},
 		}
 	}
 
 	good := base()
 	good["keyStorage"] = map[string]any{
-		"use":                  "disk",
-		"disk":                 map[string]any{"path": "/tmp"},
+		pluginSelector:         diskPlugin,
+		diskPlugin:             map[string]any{pathKey: testStoragePath},
 		"domainName":           "prod",
 		"rootRotationInterval": "12h",
 		"leaseDuration":        "90s",
@@ -43,8 +52,8 @@ func TestKeyStorageRuntimeKnobsValidate(t *testing.T) {
 
 	bad := base()
 	bad["keyStorage"] = map[string]any{
-		"use":           "disk",
-		"disk":          map[string]any{"path": "/tmp"},
+		pluginSelector:  diskPlugin,
+		diskPlugin:      map[string]any{pathKey: testStoragePath},
 		"leaseDuration": 42, // must be a string
 	}
 	snap, err = config.NewSnapshot(bad)
@@ -65,18 +74,18 @@ func TestK8sAttestationCacheSchema(t *testing.T) {
 	}
 	base := func() map[string]any {
 		return map[string]any{
-			"keyStorage":   map[string]any{"use": "disk", "disk": map[string]any{"path": "/tmp"}},
-			"policyEngine": map[string]any{"use": "cedar"},
-			"policySource": map[string]any{"use": "file", "file": map[string]any{"path": "/tmp/x"}},
-			"clientAuthn":  map[string]any{"use": "tls-spiffe"},
-			"listeners":    []any{map[string]any{"use": "http", "address": ":0"}},
+			"keyStorage":   map[string]any{pluginSelector: diskPlugin, diskPlugin: map[string]any{pathKey: testStoragePath}},
+			"policyEngine": map[string]any{pluginSelector: "cedar"},
+			"policySource": map[string]any{pluginSelector: filePlugin, filePlugin: map[string]any{pathKey: "/tmp/x"}},
+			"clientAuthn":  map[string]any{pluginSelector: "tls-spiffe"},
+			"listeners":    []any{map[string]any{pluginSelector: "http", "address": ":0"}},
 		}
 	}
 
 	good := base()
 	good["claimsMapping"] = map[string]any{
-		"use": "k8s-attestation",
-		"k8s-attestation": map[string]any{
+		pluginSelector: k8sAttestationPlugin,
+		k8sAttestationPlugin: map[string]any{
 			"cache": map[string]any{
 				"ttl":         "30s",
 				"negativeTTL": "5s",
@@ -91,8 +100,8 @@ func TestK8sAttestationCacheSchema(t *testing.T) {
 
 	bad := base()
 	bad["claimsMapping"] = map[string]any{
-		"use": "k8s-attestation",
-		"k8s-attestation": map[string]any{
+		pluginSelector: k8sAttestationPlugin,
+		k8sAttestationPlugin: map[string]any{
 			"cache": map[string]any{
 				"ttl": 30, // must be a string duration
 			},

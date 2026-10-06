@@ -11,6 +11,13 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin"
 )
 
+const (
+	unknownPlugin = "bogus"
+	cedarEngine   = "cedar"
+	diskPlugin    = "disk"
+	fileSource    = "file"
+)
+
 type fakeIface interface {
 	io.Closer
 	ID() string

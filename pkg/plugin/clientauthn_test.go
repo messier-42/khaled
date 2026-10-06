@@ -21,7 +21,7 @@ import (
 )
 
 func TestNewAuthenticatorRejectsUnknown(t *testing.T) {
-	_, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{PluginName: "bogus"})
+	_, err := plugin.NewAuthenticator(context.Background(), plugin.AuthenticatorArgs{PluginName: unknownPlugin})
 	if err == nil {
 		t.Fatalf("expected unknown plugin name to fail")
 	}

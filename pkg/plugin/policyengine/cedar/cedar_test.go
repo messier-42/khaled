@@ -12,6 +12,11 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/policyengine/cedar"
 )
 
+const (
+	tenantClaim = "tenant"
+	testTenant  = "acme"
+)
+
 func mustSet(t *testing.T, m map[string]any) attrset.Set {
 	t.Helper()
 	s, err := attrset.New(m)
@@ -42,7 +47,7 @@ func TestDecideEncapsulate_EmptyDeniesAll(t *testing.T) {
 
 	d, err := eng.DecideEncapsulate(context.Background(), policyengine.EncapsulateRequest{
 		Principal:    policyengine.Principal{URI: "spiffe://x/alice"},
-		AttributeSet: mustSet(t, map[string]any{"tenant": "acme"}),
+		AttributeSet: mustSet(t, map[string]any{tenantClaim: testTenant}),
 		Now:          time.Now(),
 	})
 	if err != nil {
@@ -79,7 +84,7 @@ func TestDecideEncapsulate_PermitByPrincipal(t *testing.T) {
 
 	d, err := eng.DecideEncapsulate(context.Background(), policyengine.EncapsulateRequest{
 		Principal:    policyengine.Principal{URI: "spiffe://example.org/alice"},
-		AttributeSet: mustSet(t, map[string]any{"tenant": "acme"}),
+		AttributeSet: mustSet(t, map[string]any{tenantClaim: testTenant}),
 	})
 	if err != nil {
 		t.Fatalf("DecideEncapsulate: %v", err)
@@ -152,13 +157,13 @@ func TestDecide_AttributeSetGate(t *testing.T) {
 	principal := policyengine.Principal{URI: "p"}
 
 	if d, _ := eng.DecideEncapsulate(ctx, policyengine.EncapsulateRequest{
-		Principal: principal, AttributeSet: mustSet(t, map[string]any{"tenant": "acme"}),
+		Principal: principal, AttributeSet: mustSet(t, map[string]any{tenantClaim: testTenant}),
 	}); !d.Allow {
 		t.Errorf("tenant=acme should be allowed")
 	}
 
 	if d, _ := eng.DecideEncapsulate(ctx, policyengine.EncapsulateRequest{
-		Principal: principal, AttributeSet: mustSet(t, map[string]any{"tenant": "zorg"}),
+		Principal: principal, AttributeSet: mustSet(t, map[string]any{tenantClaim: "zorg"}),
 	}); d.Allow {
 		t.Errorf("tenant=zorg should be denied")
 	}

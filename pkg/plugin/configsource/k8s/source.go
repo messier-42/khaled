@@ -25,6 +25,8 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/configsource"
 )
 
+const formatYAML = "yaml"
+
 var defaultWatchBackoff = backoff.Config{
 	Initial: 500 * time.Millisecond,
 	Max:     30 * time.Second,
@@ -253,7 +255,7 @@ func (s *Source) loadCurrentConfigMap(ctx context.Context) (config.Snapshot, err
 			return config.Snapshot{}, fmt.Errorf("cannot decode config data as CBOR: %w", err)
 		}
 		return snap, nil
-	case "yaml":
+	case formatYAML:
 		snap, err := configsource.DecodeYAML(data)
 		if err != nil {
 			return config.Snapshot{}, fmt.Errorf("cannot decode config data as YAML: %w", err)
@@ -273,10 +275,10 @@ func selectConfigData(configMap *corev1.ConfigMap) ([]byte, string, error) {
 
 	var candidates []candidate
 	if value, ok := configMap.Data["khaled.yaml"]; ok {
-		candidates = append(candidates, candidate{name: `data["khaled.yaml"]`, format: "yaml", data: []byte(value)})
+		candidates = append(candidates, candidate{name: `data["khaled.yaml"]`, format: formatYAML, data: []byte(value)})
 	}
 	if value, ok := configMap.BinaryData["khaled.yaml"]; ok {
-		candidates = append(candidates, candidate{name: `binaryData["khaled.yaml"]`, format: "yaml", data: value})
+		candidates = append(candidates, candidate{name: `binaryData["khaled.yaml"]`, format: formatYAML, data: value})
 	}
 	if value, ok := configMap.BinaryData["khaled.cbor"]; ok {
 		candidates = append(candidates, candidate{name: `binaryData["khaled.cbor"]`, format: "cbor", data: value})

@@ -10,13 +10,13 @@ import (
 )
 
 func TestNewPolicyEngine_UnknownPlugin(t *testing.T) {
-	if _, err := plugin.NewPolicyEngine(plugin.PolicyEngineArgs{PluginName: "bogus"}); err == nil {
+	if _, err := plugin.NewPolicyEngine(plugin.PolicyEngineArgs{PluginName: unknownPlugin}); err == nil {
 		t.Fatalf("expected error for unknown plugin")
 	}
 }
 
 func TestNewPolicyEngine_Cedar(t *testing.T) {
-	args := plugin.PolicyEngineArgs{PluginName: "cedar"}
+	args := plugin.PolicyEngineArgs{PluginName: cedarEngine}
 	args.Cedar.PolicyText = []byte(`permit(principal, action, resource);`)
 
 	eng, err := plugin.NewPolicyEngine(args)
@@ -43,7 +43,7 @@ func TestNewPolicyEngine_Cedar(t *testing.T) {
 }
 
 func TestNewPolicyEngine_CedarBadPolicy(t *testing.T) {
-	args := plugin.PolicyEngineArgs{PluginName: "cedar"}
+	args := plugin.PolicyEngineArgs{PluginName: cedarEngine}
 	args.Cedar.PolicyText = []byte(`not cedar`)
 	if _, err := plugin.NewPolicyEngine(args); err == nil {
 		t.Fatalf("expected parse error")

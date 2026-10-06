@@ -8,6 +8,15 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
+const (
+	pluginSelector   = "use"
+	claimsKey        = "claims"
+	claimsMappingKey = "claimsMapping"
+	principalsKey    = "principals"
+	staticPlugin     = "static"
+	principalURIKey  = "uri"
+)
+
 func TestAsIntBoundsChecked(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -50,13 +59,13 @@ func TestStartTolerantOfMissingBlock(t *testing.T) {
 
 func TestStartStaticBuilds(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"claimsMapping": config.Map{
-			"use": "static",
-			"static": config.Map{
-				"principals": config.Array{
+		claimsMappingKey: config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
+				principalsKey: config.Array{
 					config.Map{
-						"uri":    ".*",
-						"claims": config.Map{"k": "v"},
+						principalURIKey: ".*",
+						claimsKey:       config.Map{"k": "v"},
 					},
 				},
 			},
@@ -74,10 +83,10 @@ func TestStartStaticBuilds(t *testing.T) {
 
 func TestStartStaticRejectsEmptyPrincipals(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"claimsMapping": config.Map{
-			"use": "static",
-			"static": config.Map{
-				"principals": config.Array{},
+		claimsMappingKey: config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
+				principalsKey: config.Array{},
 			},
 		},
 	}}
@@ -88,11 +97,11 @@ func TestStartStaticRejectsEmptyPrincipals(t *testing.T) {
 
 func TestManagerReconcileNoOp(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"claimsMapping": config.Map{
-			"use": "static",
-			"static": config.Map{
-				"principals": config.Array{
-					config.Map{"uri": ".*", "claims": config.Map{"k": "v"}},
+		claimsMappingKey: config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
+				principalsKey: config.Array{
+					config.Map{principalURIKey: ".*", claimsKey: config.Map{"k": "v"}},
 				},
 			},
 		},
@@ -115,11 +124,11 @@ func TestManagerReconcileNoOp(t *testing.T) {
 
 func TestManagerReconcileRebuildsOnChange(t *testing.T) {
 	oldSnap := config.Snapshot{Root: config.Map{
-		"claimsMapping": config.Map{
-			"use": "static",
-			"static": config.Map{
-				"principals": config.Array{
-					config.Map{"uri": ".*", "claims": config.Map{"k": "v1"}},
+		claimsMappingKey: config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
+				principalsKey: config.Array{
+					config.Map{principalURIKey: ".*", claimsKey: config.Map{"k": "v1"}},
 				},
 			},
 		},
@@ -133,11 +142,11 @@ func TestManagerReconcileRebuildsOnChange(t *testing.T) {
 	before := m.Current()
 
 	newSnap := config.Snapshot{Root: config.Map{
-		"claimsMapping": config.Map{
-			"use": "static",
-			"static": config.Map{
-				"principals": config.Array{
-					config.Map{"uri": ".*", "claims": config.Map{"k": "v2"}},
+		claimsMappingKey: config.Map{
+			pluginSelector: staticPlugin,
+			staticPlugin: config.Map{
+				principalsKey: config.Array{
+					config.Map{principalURIKey: ".*", claimsKey: config.Map{"k": "v2"}},
 				},
 			},
 		},
@@ -153,8 +162,8 @@ func TestManagerReconcileRebuildsOnChange(t *testing.T) {
 
 func TestManagerK8sAttestationParsesCache(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"claimsMapping": config.Map{
-			"use": "k8s-attestation",
+		claimsMappingKey: config.Map{
+			pluginSelector: "k8s-attestation",
 			"k8s-attestation": config.Map{
 				"cache": config.Map{
 					"ttl":         "1m",

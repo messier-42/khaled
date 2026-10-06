@@ -13,12 +13,17 @@ import (
 	"github.com/messier-42/khaled/pkg/subsystems/monitoringsub"
 )
 
+const (
+	testListenAddress  = "127.0.0.1:0"
+	keyserverCheckName = "keyserver"
+)
+
 // startTest brings up a monitoring listener on a kernel-assigned port
 // and returns its base URL. The listener is stopped via t.Cleanup.
 func startTest(t *testing.T, readyFunc monitoringsub.ReadyFunc) string {
 	t.Helper()
 	r, err := monitoringsub.New(context.Background(),
-		monitoringsub.Config{Address: "127.0.0.1:0"}, readyFunc)
+		monitoringsub.Config{Address: testListenAddress}, readyFunc)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -34,17 +39,25 @@ func startTest(t *testing.T, readyFunc monitoringsub.ReadyFunc) string {
 // get performs a GET and returns status code and body.
 func get(t *testing.T, url string) (int, string) {
 	t.Helper()
-	resp, err := stdhttp.Get(url)
+	req, err := stdhttp.NewRequestWithContext(t.Context(), stdhttp.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("create GET %s: %v", url, err)
+	}
+	resp, err := stdhttp.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close GET %s response: %v", url, err)
+		}
+	}()
 	body, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(body)
 }
 
 func allOK() []health.CheckResult {
-	return []health.CheckResult{{Name: "keyserver", OK: true}}
+	return []health.CheckResult{{Name: keyserverCheckName, OK: true}}
 }
 
 func TestDisabledWhenAddressEmpty(t *testing.T) {
@@ -64,7 +77,7 @@ func TestDisabledWhenAddressEmpty(t *testing.T) {
 
 func TestEnabledRequiresReadyFunc(t *testing.T) {
 	if _, err := monitoringsub.New(context.Background(),
-		monitoringsub.Config{Address: "127.0.0.1:0"}, nil); err == nil {
+		monitoringsub.Config{Address: testListenAddress}, nil); err == nil {
 		t.Fatalf("expected error: enabled listener without readyFunc")
 	}
 }
@@ -97,7 +110,7 @@ func TestReadyzPasses(t *testing.T) {
 func TestReadyzFails503(t *testing.T) {
 	base := startTest(t, func() []health.CheckResult {
 		return []health.CheckResult{
-			{Name: "keyserver", OK: true},
+			{Name: keyserverCheckName, OK: true},
 			{Name: "tls-cert", OK: false, Detail: "no certificate yet"},
 		}
 	})
@@ -113,7 +126,7 @@ func TestReadyzFails503(t *testing.T) {
 func TestReadyzVerbose(t *testing.T) {
 	base := startTest(t, func() []health.CheckResult {
 		return []health.CheckResult{
-			{Name: "keyserver", OK: true},
+			{Name: keyserverCheckName, OK: true},
 			{Name: "tls-cert", OK: false, Detail: "no certificate yet"},
 		}
 	})
@@ -135,7 +148,12 @@ func TestReadyzVerbose(t *testing.T) {
 func TestNonGetIs405(t *testing.T) {
 	base := startTest(t, allOK)
 	for _, path := range []string{"/livez", "/readyz"} {
-		resp, err := stdhttp.Post(base+path, "text/plain", strings.NewReader(""))
+		req, err := stdhttp.NewRequestWithContext(t.Context(), stdhttp.MethodPost, base+path, nil)
+		if err != nil {
+			t.Fatalf("create POST %s: %v", path, err)
+		}
+		req.Header.Set("Content-Type", "text/plain")
+		resp, err := stdhttp.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("POST %s: %v", path, err)
 		}
@@ -156,7 +174,7 @@ func TestUnknownPathIs404(t *testing.T) {
 
 func TestStopIdempotent(t *testing.T) {
 	r, err := monitoringsub.New(context.Background(),
-		monitoringsub.Config{Address: "127.0.0.1:0"}, allOK)
+		monitoringsub.Config{Address: testListenAddress}, allOK)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

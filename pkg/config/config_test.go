@@ -6,17 +6,22 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
+const (
+	customPlugin   = "custom"
+	pluginSelector = "use"
+)
+
 func TestObjectPreservesUnknownPluginSections(t *testing.T) {
 	cfg := config.Map{
 		"keyStorage": config.Map{
-			"use": "disk",
+			pluginSelector: "disk",
 			"disk": config.Map{
 				"path": "/var/lib/khaled/keys",
 			},
 		},
 		"futurePlugin": config.Map{
-			"use": "custom",
-			"custom": config.Map{
+			pluginSelector: customPlugin,
+			customPlugin: config.Map{
 				"flag":  true,
 				"ports": config.Array{9000, 9001},
 			},
@@ -28,11 +33,11 @@ func TestObjectPreservesUnknownPluginSections(t *testing.T) {
 		t.Fatalf("expected futurePlugin object to be present")
 	}
 
-	if got, ok := futurePlugin.GetString("use"); !ok || got != "custom" {
+	if got, ok := futurePlugin.GetString(pluginSelector); !ok || got != customPlugin {
 		t.Fatalf("unexpected plugin selector: got %q, ok=%v", got, ok)
 	}
 
-	custom, ok := futurePlugin.GetMap("custom")
+	custom, ok := futurePlugin.GetMap(customPlugin)
 	if !ok {
 		t.Fatalf("expected custom subsection to be preserved")
 	}
@@ -64,7 +69,7 @@ func TestObjectPreservesUnknownPluginSections(t *testing.T) {
 func TestObjectAccessorsRejectWrongTypes(t *testing.T) {
 	cfg := config.Map{
 		"listeners": config.Array{
-			config.Map{"use": "http"},
+			config.Map{pluginSelector: "http"},
 		},
 		"spiffe": "unix:///tmp/socket",
 	}

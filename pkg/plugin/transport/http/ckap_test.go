@@ -25,6 +25,11 @@ import (
 	"github.com/messier-42/khaled/pkg/wrapper/macwrapper"
 )
 
+const (
+	defaultDomain = "default"
+	revokedReason = "revoked"
+)
+
 // --- test fixture ---
 
 type ckapFixture struct {
@@ -73,7 +78,7 @@ func newCKAPFixture(t *testing.T) *ckapFixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	d, err := store.DomainByName(ctx, "default")
+	d, err := store.DomainByName(ctx, defaultDomain)
 	if err != nil {
 		t.Fatalf("Domain: %v", err)
 	}
@@ -91,7 +96,7 @@ func newCKAPFixture(t *testing.T) *ckapFixture {
 
 	policy := &stubEngine{}
 	srv, err := keyserver.New(keyserver.Config{
-		DomainName: "default",
+		DomainName: defaultDomain,
 		Schedule:   sched,
 		Policy:     policy,
 		RefWrapper: wrap,
@@ -193,7 +198,7 @@ func TestCKAP_GetSelf(t *testing.T) {
 	if out.Principal.URI != fix.principal.URI {
 		t.Fatalf("principal.uri = %q, want %q", out.Principal.URI, fix.principal.URI)
 	}
-	if out.ServerInfo["domainName"] != "default" {
+	if out.ServerInfo["domainName"] != defaultDomain {
 		t.Fatalf("serverInfo.domainName = %v", out.ServerInfo["domainName"])
 	}
 }
@@ -443,7 +448,7 @@ func TestCKAP_Retrograde_Denied(t *testing.T) {
 	decodeOrFail(t, proBody, &pro)
 
 	fix.policy.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: false, Reason: "revoked"}, nil
+		return policyengine.Decision{Allow: false, Reason: revokedReason}, nil
 	}
 	status, body := fix.do(t, "/ckap/Retrograde", ckapraw.RetrogradeRequest{
 		Kind: ckapraw.KindRetrogradeRequest, AttributeSet: as, LeaseRef: pro.Lease.LeaseRef,
@@ -456,7 +461,7 @@ func TestCKAP_Retrograde_Denied(t *testing.T) {
 	if e.Kind != ckapraw.KindError || e.ErrorCode != int(cabe.CodePolicyDenied) {
 		t.Fatalf("error shape: %+v", e)
 	}
-	if strings.Contains(e.Summary, "revoked") {
+	if strings.Contains(e.Summary, revokedReason) {
 		t.Fatalf("summary leaks policy Reason: %q", e.Summary)
 	}
 }
@@ -537,7 +542,7 @@ func TestCKAP_AssistedEncapsulate_Denied(t *testing.T) {
 	decodeOrFail(t, proBody, &pro)
 
 	fix.policy.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: false, Reason: "revoked"}, nil
+		return policyengine.Decision{Allow: false, Reason: revokedReason}, nil
 	}
 	status, body := fix.do(t, "/ckap/AssistedEncapsulate", ckapraw.AssistedEncapsulateRequest{
 		Kind:                ckapraw.KindAssistedEncapsulateRequest,
@@ -552,7 +557,7 @@ func TestCKAP_AssistedEncapsulate_Denied(t *testing.T) {
 	if e.Kind != ckapraw.KindError || e.ErrorCode != int(cabe.CodePolicyDenied) {
 		t.Fatalf("error shape: %+v", e)
 	}
-	if strings.Contains(e.Summary, "revoked") {
+	if strings.Contains(e.Summary, revokedReason) {
 		t.Fatalf("summary leaks policy Reason: %q", e.Summary)
 	}
 }
@@ -584,7 +589,7 @@ func TestCKAP_AssistedDecapsulate_Denied(t *testing.T) {
 	decodeOrFail(t, wrapBody, &wrap)
 
 	fix.policy.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: false, Reason: "revoked"}, nil
+		return policyengine.Decision{Allow: false, Reason: revokedReason}, nil
 	}
 	status, body := fix.do(t, "/ckap/AssistedDecapsulate", ckapraw.AssistedDecapsulateRequest{
 		Kind:                ckapraw.KindAssistedDecapsulateRequest,
@@ -599,7 +604,7 @@ func TestCKAP_AssistedDecapsulate_Denied(t *testing.T) {
 	if e.Kind != ckapraw.KindError || e.ErrorCode != int(cabe.CodePolicyDenied) {
 		t.Fatalf("error shape: %+v", e)
 	}
-	if strings.Contains(e.Summary, "revoked") {
+	if strings.Contains(e.Summary, revokedReason) {
 		t.Fatalf("summary leaks policy Reason: %q", e.Summary)
 	}
 }
@@ -838,7 +843,7 @@ func newKeyserver(t *testing.T) (*keyserver.Server, *stubEngine) {
 		t.Fatalf("disk.New: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	d, err := store.DomainByName(ctx, "default")
+	d, err := store.DomainByName(ctx, defaultDomain)
 	if err != nil {
 		t.Fatalf("Domain: %v", err)
 	}
@@ -853,7 +858,7 @@ func newKeyserver(t *testing.T) (*keyserver.Server, *stubEngine) {
 	}
 	policy := &stubEngine{}
 	srv, err := keyserver.New(keyserver.Config{
-		DomainName: "default",
+		DomainName: defaultDomain,
 		Schedule:   sched,
 		Policy:     policy,
 		RefWrapper: wrap,

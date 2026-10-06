@@ -8,10 +8,16 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
+const (
+	pluginSelector   = "use"
+	claimsMappingKey = "claimsMapping"
+	clientAuthnKey   = "clientAuthn"
+)
+
 func TestValidateRequiresTLSSpiffe_AllowsMatch(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn":   config.Map{"use": "tls-spiffe"},
-		"claimsMapping": config.Map{"use": "k8s-attestation"},
+		clientAuthnKey:   config.Map{pluginSelector: "tls-spiffe"},
+		claimsMappingKey: config.Map{pluginSelector: "k8s-attestation"},
 	}}
 	if err := validateRequiresTLSSpiffe(context.Background(), nil, snap); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -20,8 +26,8 @@ func TestValidateRequiresTLSSpiffe_AllowsMatch(t *testing.T) {
 
 func TestValidateRequiresTLSSpiffe_RejectsMismatch(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn":   config.Map{"use": "oauth"},
-		"claimsMapping": config.Map{"use": "k8s-attestation"},
+		clientAuthnKey:   config.Map{pluginSelector: "oauth"},
+		claimsMappingKey: config.Map{pluginSelector: "k8s-attestation"},
 	}}
 	err := validateRequiresTLSSpiffe(context.Background(), nil, snap)
 	if err == nil {
@@ -34,8 +40,8 @@ func TestValidateRequiresTLSSpiffe_RejectsMismatch(t *testing.T) {
 
 func TestValidateRequiresTLSSpiffe_SilentOnOtherMappers(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"clientAuthn":   config.Map{"use": "oauth"},
-		"claimsMapping": config.Map{"use": "static"},
+		clientAuthnKey:   config.Map{pluginSelector: "oauth"},
+		claimsMappingKey: config.Map{pluginSelector: "static"},
 	}}
 	if err := validateRequiresTLSSpiffe(context.Background(), nil, snap); err != nil {
 		t.Errorf("unexpected error for static mapper: %v", err)

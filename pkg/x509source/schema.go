@@ -2,6 +2,11 @@ package x509source
 
 import "github.com/google/jsonschema-go/jsonschema"
 
+const (
+	sourceProperty   = "source"
+	schemaTypeString = "string"
+)
+
 // Schema returns the JSON Schema fragment describing the
 // standard serverCertificate block. Callers merge this into
 // their own schema at whatever path embeds the block (e.g.
@@ -17,21 +22,21 @@ func Schema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Type: "object",
 		Properties: map[string]*jsonschema.Schema{
-			"source": {
-				Type: "string",
+			sourceProperty: {
+				Type: schemaTypeString,
 				Enum: []any{string(KindFile), string(KindSPIFFE)},
 			},
-			"certificateFilePath":    {Type: "string"},
-			"keyFilePath":            {Type: "string"},
-			"clientTrustAnchorsPath": {Type: "string"},
+			"certificateFilePath":    {Type: schemaTypeString},
+			"keyFilePath":            {Type: schemaTypeString},
+			"clientTrustAnchorsPath": {Type: schemaTypeString},
 		},
 		AllOf: []*jsonschema.Schema{
 			{
 				If: &jsonschema.Schema{
 					Properties: map[string]*jsonschema.Schema{
-						"source": {Const: &fileSrcConst},
+						sourceProperty: {Const: &fileSrcConst},
 					},
-					Required: []string{"source"},
+					Required: []string{sourceProperty},
 				},
 				Then: &jsonschema.Schema{
 					Required: []string{"certificateFilePath", "keyFilePath"},

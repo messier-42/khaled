@@ -21,6 +21,11 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/clientauthn/tlsspiffe"
 )
 
+const (
+	exampleTrustDomain = "example.org"
+	spiffeScheme       = "spiffe"
+)
+
 // testCA issues leaf X509-SVIDs for a specific trust domain. Used by
 // the tests to assemble a bundle source and produce valid / invalid
 // leaf certificates without pulling in go-spiffe's internal test rig.
@@ -81,7 +86,7 @@ func (ca *testCA) issue(t *testing.T, path string) []*x509.Certificate {
 	}
 
 	u := &url.URL{
-		Scheme: "spiffe",
+		Scheme: spiffeScheme,
 		Host:   ca.td.Name(),
 		Path:   path,
 	}
@@ -113,7 +118,7 @@ func TestNewRejectsNilBundles(t *testing.T) {
 }
 
 func TestAuthenticateSuccess(t *testing.T) {
-	ca := newCA(t, "example.org")
+	ca := newCA(t, exampleTrustDomain)
 	chain := ca.issue(t, "/ns/prod/sa/app/pod/pod-a/uid-1")
 
 	a, err := tlsspiffe.New(ca.bundle())
@@ -137,7 +142,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 }
 
 func TestAuthenticateRejectsNoTLS(t *testing.T) {
-	ca := newCA(t, "example.org")
+	ca := newCA(t, exampleTrustDomain)
 	a, _ := tlsspiffe.New(ca.bundle())
 
 	_, err := a.Authenticate(&http.Request{})
@@ -147,7 +152,7 @@ func TestAuthenticateRejectsNoTLS(t *testing.T) {
 }
 
 func TestAuthenticateRejectsNoPeerCert(t *testing.T) {
-	ca := newCA(t, "example.org")
+	ca := newCA(t, exampleTrustDomain)
 	a, _ := tlsspiffe.New(ca.bundle())
 
 	r := &http.Request{TLS: &tls.ConnectionState{}}
@@ -161,7 +166,7 @@ func TestAuthenticateRejectsWrongTrustDomain(t *testing.T) {
 	issuerCA := newCA(t, "untrusted.example")
 	chain := issuerCA.issue(t, "/ns/prod/sa/app/pod/x/uid-1")
 
-	trustedCA := newCA(t, "example.org")
+	trustedCA := newCA(t, exampleTrustDomain)
 	a, _ := tlsspiffe.New(trustedCA.bundle())
 
 	r := &http.Request{TLS: &tls.ConnectionState{PeerCertificates: chain}}
@@ -171,11 +176,11 @@ func TestAuthenticateRejectsWrongTrustDomain(t *testing.T) {
 }
 
 func TestAuthenticateRejectsExpiredCert(t *testing.T) {
-	ca := newCA(t, "example.org")
+	ca := newCA(t, exampleTrustDomain)
 
 	// Issue a cert that's already expired.
 	leafKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	u := &url.URL{Scheme: "spiffe", Host: "example.org", Path: "/ns/prod/sa/x/pod/y/uid-1"}
+	u := &url.URL{Scheme: spiffeScheme, Host: exampleTrustDomain, Path: "/ns/prod/sa/x/pod/y/uid-1"}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(99),
 		NotBefore:    time.Now().Add(-2 * time.Hour),
@@ -206,15 +211,15 @@ func TestAuthenticateRejectsExpiredCert(t *testing.T) {
 // authenticate under an attacker-smuggled SPIFFE ID while the
 // chain-verification path only examined the "intended" one.
 func TestAuthenticateRejectsMultipleURISANs(t *testing.T) {
-	ca := newCA(t, "example.org")
+	ca := newCA(t, exampleTrustDomain)
 
 	// Issue a leaf with two URI SANs: a legitimate SPIFFE URI and
 	// a second SPIFFE URI under the same trust domain. The SPIFFE
 	// leaf-validation rule requires exactly one, so x509svid.Verify
 	// must reject it.
 	leafKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	u1 := &url.URL{Scheme: "spiffe", Host: "example.org", Path: "/ns/prod/sa/app/pod/legit/uid-1"}
-	u2 := &url.URL{Scheme: "spiffe", Host: "example.org", Path: "/ns/prod/sa/app/pod/smuggled/uid-2"}
+	u1 := &url.URL{Scheme: spiffeScheme, Host: exampleTrustDomain, Path: "/ns/prod/sa/app/pod/legit/uid-1"}
+	u2 := &url.URL{Scheme: spiffeScheme, Host: exampleTrustDomain, Path: "/ns/prod/sa/app/pod/smuggled/uid-2"}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(123),
 		Subject:      pkix.Name{CommonName: "double-uri-san"},
@@ -242,7 +247,7 @@ func TestAuthenticateRejectsMultipleURISANs(t *testing.T) {
 }
 
 func TestAuthenticateRejectsNonSPIFFECert(t *testing.T) {
-	ca := newCA(t, "example.org")
+	ca := newCA(t, exampleTrustDomain)
 
 	// Issue a leaf with no URI SAN — not a SPIFFE cert.
 	leafKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

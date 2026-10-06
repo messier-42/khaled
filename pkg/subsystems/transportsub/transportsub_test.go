@@ -23,6 +23,13 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin"
 )
 
+const (
+	pluginSelector = "use"
+	addressKey     = "address"
+	httpTransport  = "http"
+	listenersKey   = "listeners"
+)
+
 func writeTestCertFiles(t *testing.T, dir string) (certPath, keyPath string) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -77,11 +84,11 @@ func TestStart_StartsHTTPListener(t *testing.T) {
 	addr := freeLocalPort(t)
 
 	snap := config.Snapshot{Root: config.Map{
-		"listeners": config.Array{
+		listenersKey: config.Array{
 			config.Map{
-				"use":     "http",
-				"address": addr,
-				"http": config.Map{
+				pluginSelector: httpTransport,
+				addressKey:     addr,
+				httpTransport: config.Map{
 					"tls": config.Map{
 						"serverCertificate": config.Map{
 							"source":              "file",
@@ -127,10 +134,10 @@ func TestStart_StartsHTTPListener(t *testing.T) {
 
 func TestStart_FailsFastOnBadListener(t *testing.T) {
 	snap := config.Snapshot{Root: config.Map{
-		"listeners": config.Array{
+		listenersKey: config.Array{
 			config.Map{
-				"use":     "http",
-				"address": ":0",
+				pluginSelector: httpTransport,
+				addressKey:     ":0",
 				// No cert material -> http plugin refuses.
 			},
 		},
@@ -162,11 +169,11 @@ func TestStart_FailsFastOnAddressInUse(t *testing.T) {
 	certPath, keyPath := writeTestCertFiles(t, dir)
 
 	snap := config.Snapshot{Root: config.Map{
-		"listeners": config.Array{
+		listenersKey: config.Array{
 			config.Map{
-				"use":     "http",
-				"address": addr,
-				"http": config.Map{
+				pluginSelector: httpTransport,
+				addressKey:     addr,
+				httpTransport: config.Map{
 					"tls": config.Map{
 						"serverCertificate": config.Map{
 							"source":              "file",

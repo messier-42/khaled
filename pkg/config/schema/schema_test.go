@@ -15,6 +15,16 @@ import (
 	"github.com/messier-42/khaled/pkg/config/schema"
 )
 
+const (
+	pluginSelector   = "use"
+	addressProperty  = "addr"
+	diskPlugin       = "disk"
+	keyStorageKind   = "keyStorage"
+	schemaTypeObject = "object"
+	pathProperty     = "path"
+	schemaTypeString = "string"
+)
+
 func mustSnapshot(t *testing.T, raw any) config.Snapshot {
 	t.Helper()
 	snap, err := config.NewSnapshot(raw)
@@ -26,17 +36,17 @@ func mustSnapshot(t *testing.T, raw any) config.Snapshot {
 
 func TestBuildProducesObjectSchemaWithPluginKindVariants(t *testing.T) {
 	r := schema.New()
-	err := r.RegisterPluginKind("keyStorage", "disk", &jsonschema.Schema{
-		Type:     "object",
-		Required: []string{"path"},
+	err := r.RegisterPluginKind(keyStorageKind, diskPlugin, &jsonschema.Schema{
+		Type:     schemaTypeObject,
+		Required: []string{pathProperty},
 		Properties: map[string]*jsonschema.Schema{
-			"path": {Type: "string", MinLength: new(1)},
+			pathProperty: {Type: schemaTypeString, MinLength: new(1)},
 		},
 	})
 	if err != nil {
 		t.Fatalf("register disk: %v", err)
 	}
-	if err := r.RegisterPluginKind("keyStorage", "memory", nil); err != nil {
+	if err := r.RegisterPluginKind(keyStorageKind, "memory", nil); err != nil {
 		t.Fatalf("register memory: %v", err)
 	}
 
@@ -44,33 +54,33 @@ func TestBuildProducesObjectSchemaWithPluginKindVariants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	if built.Schema().Type != "object" {
+	if built.Schema().Type != schemaTypeObject {
 		t.Fatalf("expected object root, got %q", built.Schema().Type)
 	}
 
-	ks := built.Schema().Properties["keyStorage"]
+	ks := built.Schema().Properties[keyStorageKind]
 	if ks == nil {
 		t.Fatalf("expected keyStorage property")
 	}
-	if ks.Properties["use"] == nil {
+	if ks.Properties[pluginSelector] == nil {
 		t.Fatalf("expected keyStorage.use property")
 	}
 }
 
 func TestValidateAcceptsWellFormedConfig(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", &jsonschema.Schema{
-		Type:     "object",
-		Required: []string{"path"},
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, &jsonschema.Schema{
+		Type:     schemaTypeObject,
+		Required: []string{pathProperty},
 		Properties: map[string]*jsonschema.Schema{
-			"path": {Type: "string", MinLength: new(1)},
+			pathProperty: {Type: schemaTypeString, MinLength: new(1)},
 		},
 	})
 
 	snap := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{
-			"use":  "disk",
-			"disk": map[string]any{"path": "/var/lib/khaled"},
+		keyStorageKind: map[string]any{
+			pluginSelector: diskPlugin,
+			diskPlugin:     map[string]any{pathProperty: "/var/lib/khaled"},
 		},
 	})
 
@@ -111,10 +121,10 @@ func TestValidateLargeIntegerPreservesPrecision(t *testing.T) {
 
 func TestValidateRejectsUnknownUseValue(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
 
 	snap := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{"use": "bogus"},
+		keyStorageKind: map[string]any{pluginSelector: "bogus"},
 	})
 
 	err := r.Validate(context.Background(), nil, snap)
@@ -125,13 +135,13 @@ func TestValidateRejectsUnknownUseValue(t *testing.T) {
 
 func TestValidateRejectsMissingSubBlock(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", &jsonschema.Schema{
-		Type:     "object",
-		Required: []string{"path"},
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, &jsonschema.Schema{
+		Type:     schemaTypeObject,
+		Required: []string{pathProperty},
 	})
 
 	snap := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{"use": "disk"},
+		keyStorageKind: map[string]any{pluginSelector: diskPlugin},
 	})
 
 	err := r.Validate(context.Background(), nil, snap)
@@ -143,24 +153,24 @@ func TestValidateRejectsMissingSubBlock(t *testing.T) {
 func TestRegisterPathMergesAtDottedPath(t *testing.T) {
 	r := schema.New()
 	if err := r.RegisterPath("metrics", &jsonschema.Schema{
-		Type:     "object",
-		Required: []string{"addr"},
+		Type:     schemaTypeObject,
+		Required: []string{addressProperty},
 		Properties: map[string]*jsonschema.Schema{
-			"addr": {Type: "string"},
+			addressProperty: {Type: schemaTypeString},
 		},
 	}); err != nil {
 		t.Fatalf("register metrics: %v", err)
 	}
 
 	snap := mustSnapshot(t, map[string]any{
-		"metrics": map[string]any{"addr": ":9090"},
+		"metrics": map[string]any{addressProperty: ":9090"},
 	})
 	if err := r.Validate(context.Background(), nil, snap); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	bad := mustSnapshot(t, map[string]any{
-		"metrics": map[string]any{"addr": 1234},
+		"metrics": map[string]any{addressProperty: 1234},
 	})
 	if err := r.Validate(context.Background(), nil, bad); err == nil {
 		t.Fatalf("expected error for wrong type")
@@ -169,7 +179,7 @@ func TestRegisterPathMergesAtDottedPath(t *testing.T) {
 
 func TestRegisterPathRejectsCollisionWithPluginKind(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
 
 	err := r.RegisterPath("keyStorage.extra", &jsonschema.Schema{})
 	if err == nil {
@@ -179,7 +189,7 @@ func TestRegisterPathRejectsCollisionWithPluginKind(t *testing.T) {
 
 func TestRegisterPluginKindRejectsCollisionWithPath(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPath("metrics", &jsonschema.Schema{Type: "object"})
+	_ = r.RegisterPath("metrics", &jsonschema.Schema{Type: schemaTypeObject})
 
 	err := r.RegisterPluginKind("metrics", "prom", nil)
 	if err == nil {
@@ -189,16 +199,16 @@ func TestRegisterPluginKindRejectsCollisionWithPath(t *testing.T) {
 
 func TestRegisterDuplicatePluginKindVariantRejected(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
-	if err := r.RegisterPluginKind("keyStorage", "disk", nil); err == nil {
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
+	if err := r.RegisterPluginKind(keyStorageKind, diskPlugin, nil); err == nil {
 		t.Fatalf("expected duplicate registration error")
 	}
 }
 
 func TestRegisterDuplicatePathRejected(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPath("metrics", &jsonschema.Schema{Type: "object"})
-	if err := r.RegisterPath("metrics", &jsonschema.Schema{Type: "object"}); err == nil {
+	_ = r.RegisterPath("metrics", &jsonschema.Schema{Type: schemaTypeObject})
+	if err := r.RegisterPath("metrics", &jsonschema.Schema{Type: schemaTypeObject}); err == nil {
 		t.Fatalf("expected duplicate path error")
 	}
 }
@@ -233,19 +243,19 @@ func TestBuildSchemaDeterministic(t *testing.T) {
 		// Register variants in an order that would otherwise
 		// surface map-iteration nondeterminism: alphabetically
 		// reversed, and with a common-prop alongside.
-		if err := r.RegisterPluginKind("keyStorage", "zebra", &jsonschema.Schema{
-			Type:     "object",
-			Required: []string{"path"},
+		if err := r.RegisterPluginKind(keyStorageKind, "zebra", &jsonschema.Schema{
+			Type:     schemaTypeObject,
+			Required: []string{pathProperty},
 		}); err != nil {
 			t.Fatalf("register zebra: %v", err)
 		}
-		if err := r.RegisterPluginKind("keyStorage", "yak", nil); err != nil {
+		if err := r.RegisterPluginKind(keyStorageKind, "yak", nil); err != nil {
 			t.Fatalf("register yak: %v", err)
 		}
-		if err := r.RegisterPluginKind("keyStorage", "aardvark", nil); err != nil {
+		if err := r.RegisterPluginKind(keyStorageKind, "aardvark", nil); err != nil {
 			t.Fatalf("register aardvark: %v", err)
 		}
-		if err := r.RegisterPluginKindCommon("keyStorage", "leaseDuration", &jsonschema.Schema{Type: "string"}); err != nil {
+		if err := r.RegisterPluginKindCommon(keyStorageKind, "leaseDuration", &jsonschema.Schema{Type: schemaTypeString}); err != nil {
 			t.Fatalf("register common: %v", err)
 		}
 		built, err := r.Build()
@@ -270,7 +280,7 @@ func TestBuildSchemaDeterministic(t *testing.T) {
 
 func TestBuildIdempotent(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
 	first, err := r.Build()
 	if err != nil {
 		t.Fatalf("build: %v", err)
@@ -286,7 +296,7 @@ func TestBuildIdempotent(t *testing.T) {
 
 func TestRegisterValidatorRunsAfterSchemaPasses(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
 
 	called := false
 	_ = r.RegisterValidator(func(_ context.Context, _ *config.Snapshot, snap config.Snapshot) error {
@@ -295,7 +305,7 @@ func TestRegisterValidatorRunsAfterSchemaPasses(t *testing.T) {
 	})
 
 	snap := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{"use": "disk"},
+		keyStorageKind: map[string]any{pluginSelector: diskPlugin},
 	})
 
 	err := r.Validate(context.Background(), nil, snap)
@@ -312,7 +322,7 @@ func TestRegisterValidatorRunsAfterSchemaPasses(t *testing.T) {
 
 func TestValidatorsNotRunIfSchemaFails(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
 
 	called := false
 	_ = r.RegisterValidator(func(_ context.Context, _ *config.Snapshot, _ config.Snapshot) error {
@@ -322,7 +332,7 @@ func TestValidatorsNotRunIfSchemaFails(t *testing.T) {
 
 	// Schema violation: keyStorage.use must be a string.
 	snap := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{"use": 42},
+		keyStorageKind: map[string]any{pluginSelector: 42},
 	})
 
 	err := r.Validate(context.Background(), nil, snap)
@@ -336,7 +346,7 @@ func TestValidatorsNotRunIfSchemaFails(t *testing.T) {
 
 func TestMultipleValidatorsErrorsAggregated(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
 
 	_ = r.RegisterValidator(func(_ context.Context, _ *config.Snapshot, _ config.Snapshot) error {
 		return errors.New("first fail")
@@ -346,7 +356,7 @@ func TestMultipleValidatorsErrorsAggregated(t *testing.T) {
 	})
 
 	snap := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{"use": "disk"},
+		keyStorageKind: map[string]any{pluginSelector: diskPlugin},
 	})
 
 	err := r.Validate(context.Background(), nil, snap)
@@ -361,25 +371,25 @@ func TestMultipleValidatorsErrorsAggregated(t *testing.T) {
 
 func TestRegisterPluginKindCommon(t *testing.T) {
 	r := schema.New()
-	if err := r.RegisterPluginKind("keyStorage", "disk", &jsonschema.Schema{
-		Type:     "object",
-		Required: []string{"path"},
+	if err := r.RegisterPluginKind(keyStorageKind, diskPlugin, &jsonschema.Schema{
+		Type:     schemaTypeObject,
+		Required: []string{pathProperty},
 		Properties: map[string]*jsonschema.Schema{
-			"path": {Type: "string", MinLength: new(1)},
+			pathProperty: {Type: schemaTypeString, MinLength: new(1)},
 		},
 	}); err != nil {
 		t.Fatalf("register disk: %v", err)
 	}
-	if err := r.RegisterPluginKindCommon("keyStorage", "leaseDuration", &jsonschema.Schema{
-		Type: "string", MinLength: new(1),
+	if err := r.RegisterPluginKindCommon(keyStorageKind, "leaseDuration", &jsonschema.Schema{
+		Type: schemaTypeString, MinLength: new(1),
 	}); err != nil {
 		t.Fatalf("register common: %v", err)
 	}
 
 	good := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{
-			"use":           "disk",
-			"disk":          map[string]any{"path": "/tmp/x"},
+		keyStorageKind: map[string]any{
+			pluginSelector:  diskPlugin,
+			diskPlugin:      map[string]any{pathProperty: "/tmp/x"},
 			"leaseDuration": "5m",
 		},
 	})
@@ -388,9 +398,9 @@ func TestRegisterPluginKindCommon(t *testing.T) {
 	}
 
 	bad := mustSnapshot(t, map[string]any{
-		"keyStorage": map[string]any{
-			"use":           "disk",
-			"disk":          map[string]any{"path": "/tmp/x"},
+		keyStorageKind: map[string]any{
+			pluginSelector:  diskPlugin,
+			diskPlugin:      map[string]any{pathProperty: "/tmp/x"},
 			"leaseDuration": 42,
 		},
 	})
@@ -401,16 +411,16 @@ func TestRegisterPluginKindCommon(t *testing.T) {
 
 func TestRegisterPluginKindCommonRejectsUseCollision(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
-	if err := r.RegisterPluginKindCommon("keyStorage", "use", &jsonschema.Schema{Type: "string"}); err == nil {
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
+	if err := r.RegisterPluginKindCommon(keyStorageKind, pluginSelector, &jsonschema.Schema{Type: schemaTypeString}); err == nil {
 		t.Fatal("expected error for use collision")
 	}
 }
 
 func TestRegisterPluginKindCommonRejectsVariantCollision(t *testing.T) {
 	r := schema.New()
-	_ = r.RegisterPluginKind("keyStorage", "disk", nil)
-	if err := r.RegisterPluginKindCommon("keyStorage", "disk", &jsonschema.Schema{Type: "string"}); err == nil {
+	_ = r.RegisterPluginKind(keyStorageKind, diskPlugin, nil)
+	if err := r.RegisterPluginKindCommon(keyStorageKind, diskPlugin, &jsonschema.Schema{Type: schemaTypeString}); err == nil {
 		t.Fatal("expected error for variant collision")
 	}
 }

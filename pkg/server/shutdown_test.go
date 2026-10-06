@@ -35,11 +35,19 @@ func newTestServerWithMonitoring(t *testing.T, swt time.Duration) *Server {
 
 func readyzStatus(t *testing.T, base string) int {
 	t.Helper()
-	resp, err := stdhttp.Get(base + "/readyz")
+	req, err := stdhttp.NewRequestWithContext(t.Context(), stdhttp.MethodGet, base+"/readyz", nil)
+	if err != nil {
+		t.Fatalf("create GET /readyz: %v", err)
+	}
+	resp, err := stdhttp.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /readyz: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close /readyz response: %v", err)
+		}
+	}()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode
 }
@@ -82,7 +90,14 @@ func TestStopFlipsReadyzBeforeWarningSleep(t *testing.T) {
 	<-stopped
 
 	// After Stop, the listener is closed.
-	if _, err := stdhttp.Get(base + "/readyz"); err == nil {
+	req, err := stdhttp.NewRequestWithContext(t.Context(), stdhttp.MethodGet, base+"/readyz", nil)
+	if err != nil {
+		t.Fatalf("create GET /readyz: %v", err)
+	}
+	if resp, err := stdhttp.DefaultClient.Do(req); err == nil {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("close /readyz response: %v", err)
+		}
 		t.Error("monitoring listener should be closed after Stop")
 	}
 }

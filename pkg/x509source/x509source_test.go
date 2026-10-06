@@ -23,8 +23,14 @@ import (
 )
 
 const (
-	initialCN = "initial.example"
-	rotatedCN = "rotated.example"
+	spiffeSource            = "spiffe"
+	certificatePEMType      = "CERTIFICATE"
+	certificatePathProperty = "certificateFilePath"
+	fileSource              = "file"
+	keyPathProperty         = "keyFilePath"
+	sourceProperty          = "source"
+	initialCN               = "initial.example"
+	rotatedCN               = "rotated.example"
 )
 
 // makeSelfSignedPEM is the shared cert-key PEM generator used by
@@ -49,7 +55,7 @@ func makeSelfSignedPEM(t *testing.T, cn string) (certPEM, keyPEM []byte) {
 	if err != nil {
 		t.Fatalf("create cert: %v", err)
 	}
-	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: certificatePEMType, Bytes: der})
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
 		t.Fatalf("marshal key: %v", err)
@@ -78,7 +84,7 @@ func writeSelfSigned(t *testing.T, certPath, keyPath, cn string) {
 	if err != nil {
 		t.Fatalf("create cert: %v", err)
 	}
-	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: certificatePEMType, Bytes: der}), 0o600); err != nil {
 		t.Fatalf("write cert: %v", err)
 	}
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
@@ -112,7 +118,7 @@ func makeCAPair(t *testing.T, cn string) (certPEM []byte, key *ecdsa.PrivateKey)
 	if err != nil {
 		t.Fatalf("create ca: %v", err)
 	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), caKey
+	return pem.EncodeToMemory(&pem.Block{Type: certificatePEMType, Bytes: der}), caKey
 }
 
 // issueLeaf returns the DER bytes of a leaf certificate with
@@ -323,8 +329,8 @@ func TestConfigFromSnapshotDefaultsToFile(t *testing.T) {
 }
 
 func TestConfigFromSnapshotReadsSPIFFESocket(t *testing.T) {
-	sc := config.Map{"source": "spiffe"}
-	root := config.Map{"spiffe": config.Map{"workloadSocketPath": "/run/spire/agent.sock"}}
+	sc := config.Map{sourceProperty: spiffeSource}
+	root := config.Map{spiffeSource: config.Map{"workloadSocketPath": "/run/spire/agent.sock"}}
 	cfg := x509source.ConfigFromSnapshot(sc, root)
 	if cfg.Kind != x509source.KindSPIFFE {
 		t.Errorf("kind = %q, want spiffe", cfg.Kind)
@@ -336,9 +342,9 @@ func TestConfigFromSnapshotReadsSPIFFESocket(t *testing.T) {
 
 func TestConfigFromSnapshotTolerantOfNilRootBlock(t *testing.T) {
 	sc := config.Map{
-		"source":              "file",
-		"certificateFilePath": "/a",
-		"keyFilePath":         "/b",
+		sourceProperty:          fileSource,
+		certificatePathProperty: "/a",
+		keyPathProperty:         "/b",
 	}
 	cfg := x509source.ConfigFromSnapshot(sc, nil)
 	if cfg.Kind != x509source.KindFile {
@@ -557,9 +563,9 @@ func TestFileSourceClientCACertPoolRejectsEmptyBundle(t *testing.T) {
 
 func TestConfigFromSnapshotReadsClientTrustAnchorsPath(t *testing.T) {
 	sc := config.Map{
-		"source":                 "file",
-		"certificateFilePath":    "/a",
-		"keyFilePath":            "/b",
+		sourceProperty:           fileSource,
+		certificatePathProperty:  "/a",
+		keyPathProperty:          "/b",
 		"clientTrustAnchorsPath": "/c",
 	}
 	cfg := x509source.ConfigFromSnapshot(sc, nil)
@@ -573,7 +579,7 @@ func TestSchemaDeclaresSourceEnum(t *testing.T) {
 	if s == nil || s.Properties == nil {
 		t.Fatalf("schema is empty")
 	}
-	source, ok := s.Properties["source"]
+	source, ok := s.Properties[sourceProperty]
 	if !ok {
 		t.Fatalf("schema missing source property")
 	}
@@ -581,7 +587,7 @@ func TestSchemaDeclaresSourceEnum(t *testing.T) {
 	for _, v := range source.Enum {
 		got[v.(string)] = true
 	}
-	for _, want := range []string{"file", "spiffe"} {
+	for _, want := range []string{fileSource, spiffeSource} {
 		if !got[want] {
 			t.Errorf("schema enum missing %q", want)
 		}
@@ -606,22 +612,22 @@ func TestSchemaRequiresFilePathsWhenSourceIsFile(t *testing.T) {
 	}{
 		{
 			name:    "file with both paths",
-			input:   map[string]any{"source": "file", "certificateFilePath": "/c", "keyFilePath": "/k"},
+			input:   map[string]any{sourceProperty: fileSource, certificatePathProperty: "/c", keyPathProperty: "/k"},
 			wantErr: false,
 		},
 		{
 			name:    "file missing cert path",
-			input:   map[string]any{"source": "file", "keyFilePath": "/k"},
+			input:   map[string]any{sourceProperty: fileSource, keyPathProperty: "/k"},
 			wantErr: true,
 		},
 		{
 			name:    "file missing key path",
-			input:   map[string]any{"source": "file", "certificateFilePath": "/c"},
+			input:   map[string]any{sourceProperty: fileSource, certificatePathProperty: "/c"},
 			wantErr: true,
 		},
 		{
 			name:    "spiffe does not need file paths",
-			input:   map[string]any{"source": "spiffe"},
+			input:   map[string]any{sourceProperty: spiffeSource},
 			wantErr: false,
 		},
 	}

@@ -6,23 +6,25 @@ import (
 	"github.com/messier-42/khaled/pkg/config/schema"
 )
 
+const schemaTypeObject = "object"
+
 // RegisterSchema contributes this plugin's configuration schema to r.
 // It is called once during registry construction.
 func RegisterSchema(r *schema.Registry) error {
 	minOne := 1
 	return r.RegisterPluginKind("claimsMapping", "static", &jsonschema.Schema{
-		Type:     "object",
+		Type:     schemaTypeObject,
 		Required: []string{"principals"},
 		Properties: map[string]*jsonschema.Schema{
 			"principals": {
 				Type: "array",
 				Items: &jsonschema.Schema{
-					Type:     "object",
+					Type:     schemaTypeObject,
 					Required: []string{"uri", "claims"},
 					Properties: map[string]*jsonschema.Schema{
 						"uri": {Type: "string", MinLength: &minOne},
 						"claims": {
-							Type: "object",
+							Type: schemaTypeObject,
 							AdditionalProperties: &jsonschema.Schema{
 								Type: "string",
 							},

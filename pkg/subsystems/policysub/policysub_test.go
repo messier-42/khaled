@@ -13,13 +13,22 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 )
 
+const (
+	pluginSelector  = "use"
+	policyEngineKey = "policyEngine"
+	cedarEngine     = "cedar"
+	fileSource      = "file"
+	inlineSource    = "inline"
+	policySourceKey = "policySource"
+)
+
 func snapWithPolicy(t *testing.T, path string) config.Snapshot {
 	t.Helper()
 	snap, err := config.NewSnapshot(map[string]any{
-		"policyEngine": map[string]any{"use": "cedar"},
-		"policySource": map[string]any{
-			"use":  "file",
-			"file": map[string]any{"path": path},
+		policyEngineKey: map[string]any{pluginSelector: cedarEngine},
+		policySourceKey: map[string]any{
+			pluginSelector: fileSource,
+			fileSource:     map[string]any{"path": path},
 		},
 	})
 	if err != nil {
@@ -43,14 +52,14 @@ func TestArgsFromSnapshot_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("args: %v", err)
 	}
-	if args.PluginName != "file" || args.EngineName != "cedar" || args.File.Path != "/tmp/x" {
+	if args.PluginName != fileSource || args.EngineName != cedarEngine || args.File.Path != "/tmp/x" {
 		t.Errorf("unexpected args: %+v", args)
 	}
 }
 
 func TestArgsFromSnapshot_MissingEngine(t *testing.T) {
 	snap, _ := config.NewSnapshot(map[string]any{
-		"policySource": map[string]any{"use": "file", "file": map[string]any{"path": "/x"}},
+		policySourceKey: map[string]any{pluginSelector: fileSource, fileSource: map[string]any{"path": "/x"}},
 	})
 	if _, err := argsFromSnapshot(snap); err == nil {
 		t.Fatalf("expected error for missing policyEngine block")
@@ -59,7 +68,7 @@ func TestArgsFromSnapshot_MissingEngine(t *testing.T) {
 
 func TestArgsFromSnapshot_MissingSource(t *testing.T) {
 	snap, _ := config.NewSnapshot(map[string]any{
-		"policyEngine": map[string]any{"use": "cedar"},
+		policyEngineKey: map[string]any{pluginSelector: cedarEngine},
 	})
 	if _, err := argsFromSnapshot(snap); err == nil {
 		t.Fatalf("expected error for missing policySource block")
@@ -68,8 +77,8 @@ func TestArgsFromSnapshot_MissingSource(t *testing.T) {
 
 func TestArgsFromSnapshot_MissingFilePath(t *testing.T) {
 	snap, _ := config.NewSnapshot(map[string]any{
-		"policyEngine": map[string]any{"use": "cedar"},
-		"policySource": map[string]any{"use": "file", "file": map[string]any{}},
+		policyEngineKey: map[string]any{pluginSelector: cedarEngine},
+		policySourceKey: map[string]any{pluginSelector: fileSource, fileSource: map[string]any{}},
 	})
 	if _, err := argsFromSnapshot(snap); err == nil {
 		t.Fatalf("expected error for missing file.path")
@@ -250,10 +259,10 @@ func TestManager_StopClearsEngine(t *testing.T) {
 func snapWithInlinePolicy(t *testing.T, text string) config.Snapshot {
 	t.Helper()
 	snap, err := config.NewSnapshot(map[string]any{
-		"policyEngine": map[string]any{"use": "cedar"},
-		"policySource": map[string]any{
-			"use":    "inline",
-			"inline": map[string]any{"text": text},
+		policyEngineKey: map[string]any{pluginSelector: cedarEngine},
+		policySourceKey: map[string]any{
+			pluginSelector: inlineSource,
+			inlineSource:   map[string]any{"text": text},
 		},
 	})
 	if err != nil {
@@ -268,7 +277,7 @@ func TestArgsFromSnapshot_InlineHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("args: %v", err)
 	}
-	if args.PluginName != "inline" || args.EngineName != "cedar" {
+	if args.PluginName != inlineSource || args.EngineName != cedarEngine {
 		t.Errorf("unexpected args: %+v", args)
 	}
 	if args.Inline.Text != "permit(principal, action, resource);" {
@@ -278,8 +287,8 @@ func TestArgsFromSnapshot_InlineHappyPath(t *testing.T) {
 
 func TestArgsFromSnapshot_InlineMissingText(t *testing.T) {
 	snap, _ := config.NewSnapshot(map[string]any{
-		"policyEngine": map[string]any{"use": "cedar"},
-		"policySource": map[string]any{"use": "inline", "inline": map[string]any{}},
+		policyEngineKey: map[string]any{pluginSelector: cedarEngine},
+		policySourceKey: map[string]any{pluginSelector: inlineSource, inlineSource: map[string]any{}},
 	})
 	if _, err := argsFromSnapshot(snap); err == nil {
 		t.Fatalf("expected error for missing inline.text")

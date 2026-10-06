@@ -18,6 +18,11 @@ import (
 	"github.com/messier-42/khaled/pkg/wrapper/macwrapper"
 )
 
+const (
+	defaultDomain = "default"
+	revokedReason = "revoked"
+)
+
 // --- test helpers ---
 
 type stubEngine struct {
@@ -68,7 +73,7 @@ func newFixture(t *testing.T, opts ...func(*fixture)) *fixture {
 		t.Fatalf("disk.New: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	d, err := store.DomainByName(ctx, "default")
+	d, err := store.DomainByName(ctx, defaultDomain)
 	if err != nil {
 		t.Fatalf("Domain: %v", err)
 	}
@@ -83,7 +88,7 @@ func newFixture(t *testing.T, opts ...func(*fixture)) *fixture {
 	}
 	eng := &stubEngine{}
 	srv, err := keyserver.New(keyserver.Config{
-		DomainName:    "default",
+		DomainName:    defaultDomain,
 		Schedule:      sched,
 		Policy:        eng,
 		RefWrapper:    wrap,
@@ -132,7 +137,7 @@ func TestNew_Validation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t)
 			cfg := keyserver.Config{
-				DomainName:    "default",
+				DomainName:    defaultDomain,
 				Schedule:      f.sched,
 				Policy:        f.engine,
 				RefWrapper:    stubWrapper{},
@@ -374,7 +379,7 @@ func TestAssistedEncapsulate_Denied(t *testing.T) {
 	// captive decision is already cached in the LKAT, so the deny
 	// here tests the AssistedEncapsulate gate specifically.
 	f.engine.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: false, Reason: "revoked"}, nil
+		return policyengine.Decision{Allow: false, Reason: revokedReason}, nil
 	}
 	_, err = f.srv.AssistedEncapsulate(ctx, keyserver.AssistedEncapsulateRequest{
 		Principal: f.principal,
@@ -384,7 +389,7 @@ func TestAssistedEncapsulate_Denied(t *testing.T) {
 	if !errors.Is(err, keyserver.ErrDenied) {
 		t.Fatalf("err = %v, want ErrDenied", err)
 	}
-	if strings.Contains(err.Error(), "revoked") {
+	if strings.Contains(err.Error(), revokedReason) {
 		t.Fatalf("err.Error() = %q; policy Reason must not appear in returned error", err.Error())
 	}
 }
@@ -449,7 +454,7 @@ func TestRetrograde_Denied(t *testing.T) {
 		Principal: f.principal, AttributeSet: as,
 	})
 	f.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: false, Reason: "revoked"}, nil
+		return policyengine.Decision{Allow: false, Reason: revokedReason}, nil
 	}
 	_, err := f.srv.Retrograde(ctx, keyserver.RetrogradeRequest{
 		Principal: f.principal, AttributeSet: as, LeaseRef: pro.Lease.LeaseRef,
@@ -569,7 +574,7 @@ func TestAssistedDecap_Denied(t *testing.T) {
 
 	// Now revoke.
 	f.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: false, Reason: "revoked"}, nil
+		return policyengine.Decision{Allow: false, Reason: revokedReason}, nil
 	}
 	_, err = f.srv.AssistedDecapsulate(ctx, keyserver.AssistedDecapsulateRequest{
 		Principal: f.principal, LKAT: pro.Lease.LKAI.Captive.LKAT, WrappedCEK: wrapResp.WrappedCEK,
@@ -591,7 +596,7 @@ func TestGetSelf(t *testing.T) {
 	if resp.Principal.URI != f.principal.URI {
 		t.Fatalf("URI = %q, want %q", resp.Principal.URI, f.principal.URI)
 	}
-	if resp.ServerInfo["domainName"] != "default" {
+	if resp.ServerInfo["domainName"] != defaultDomain {
 		t.Fatalf("domainName = %v, want default", resp.ServerInfo["domainName"])
 	}
 	if v, _ := resp.ServerInfo["version"].(string); v == "" {

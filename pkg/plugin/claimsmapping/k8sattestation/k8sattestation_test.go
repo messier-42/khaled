@@ -21,6 +21,8 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/clientauthn"
 )
 
+const testAppName = "app"
+
 func checkClaim(t *testing.T, claims map[string]any, key, want string) {
 	t.Helper()
 	got, ok := claims[key]
@@ -54,14 +56,14 @@ func testPod(ns, name, uid, sa, node string, image string, labels, annotations m
 			ServiceAccountName: sa,
 			NodeName:           node,
 			Containers: []corev1.Container{
-				{Name: "app", Image: image},
+				{Name: testAppName, Image: image},
 			},
 		},
 	}
 }
 
 func TestMapSuccess(t *testing.T) {
-	pod := testPod("prod", "pod-a", "uid-1", "app", "node-7",
+	pod := testPod("prod", "pod-a", "uid-1", testAppName, "node-7",
 		"ghcr.io/org/app@sha256:deadbeef",
 		map[string]string{"tier": "critical"},
 		map[string]string{"cabe/classification": "secret"},
@@ -78,7 +80,7 @@ func TestMapSuccess(t *testing.T) {
 
 	checkClaim(t, p.Claims, "trust-domain", "example.org")
 	checkClaim(t, p.Claims, "namespace", "prod")
-	checkClaim(t, p.Claims, "service-account", "app")
+	checkClaim(t, p.Claims, "service-account", testAppName)
 	checkClaim(t, p.Claims, "pod-name", "pod-a")
 	checkClaim(t, p.Claims, "pod-uid", "uid-1")
 	checkClaim(t, p.Claims, "node-name", "node-7")
@@ -87,7 +89,7 @@ func TestMapSuccess(t *testing.T) {
 	if !ok {
 		t.Fatalf("images claim has wrong type: %T", p.Claims["images"])
 	}
-	if got := images["app"]; got != "ghcr.io/org/app@sha256:deadbeef" {
+	if got := images[testAppName]; got != "ghcr.io/org/app@sha256:deadbeef" {
 		t.Errorf("images.app = %v", got)
 	}
 
@@ -126,10 +128,10 @@ func TestMapIncludesInitAndEphemeralContainersWithPrefixes(t *testing.T) {
 			UID:       types.UID("uid-1"),
 		},
 		Spec: corev1.PodSpec{
-			ServiceAccountName: "app",
+			ServiceAccountName: testAppName,
 			NodeName:           "node-7",
 			Containers: []corev1.Container{
-				{Name: "app", Image: "ghcr.io/org/app@sha256:main"},
+				{Name: testAppName, Image: "ghcr.io/org/app@sha256:main"},
 			},
 			InitContainers: []corev1.Container{
 				{Name: "init-tool", Image: "ghcr.io/org/init@sha256:init"},
@@ -137,7 +139,7 @@ func TestMapIncludesInitAndEphemeralContainersWithPrefixes(t *testing.T) {
 				// a main container. The prefix keeps the two
 				// namespaces disjoint so the main container's
 				// image is not shadowed.
-				{Name: "app", Image: "ghcr.io/org/shadow@sha256:shadow"},
+				{Name: testAppName, Image: "ghcr.io/org/shadow@sha256:shadow"},
 			},
 			EphemeralContainers: []corev1.EphemeralContainer{
 				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{
@@ -160,7 +162,7 @@ func TestMapIncludesInitAndEphemeralContainersWithPrefixes(t *testing.T) {
 	if !ok {
 		t.Fatalf("images claim has wrong type: %T", p.Claims["images"])
 	}
-	if got := images["app"]; got != "ghcr.io/org/app@sha256:main" {
+	if got := images[testAppName]; got != "ghcr.io/org/app@sha256:main" {
 		t.Errorf("images[app] = %v, want main-container image", got)
 	}
 	if got := images["init:init-tool"]; got != "ghcr.io/org/init@sha256:init" {
@@ -217,7 +219,7 @@ func TestMapPodNotFound(t *testing.T) {
 }
 
 func TestMapUIDMismatch(t *testing.T) {
-	pod := testPod("prod", "pod-a", "real-uid", "app", "node-7", "img", nil, nil)
+	pod := testPod("prod", "pod-a", "real-uid", testAppName, "node-7", "img", nil, nil)
 	client := fake.NewSimpleClientset(pod)
 	m := k8sattestation.NewWithClient(client, k8sattestation.Config{})
 	defer m.Close() // best effort
@@ -243,7 +245,7 @@ func TestMapServiceAccountMismatch(t *testing.T) {
 }
 
 func TestMapCachesSuccess(t *testing.T) {
-	pod := testPod("prod", "pod-a", "uid-1", "app", "node-7", "img", nil, nil)
+	pod := testPod("prod", "pod-a", "uid-1", testAppName, "node-7", "img", nil, nil)
 	client := fake.NewSimpleClientset(pod)
 
 	var gets atomic.Int64
@@ -304,7 +306,7 @@ func TestMapDoesNotCacheTransientErrors(t *testing.T) {
 		if n == 1 {
 			return true, nil, errors.New("simulated transient API error")
 		}
-		return true, testPod("prod", "pod-a", "uid-1", "app", "node-7", "img", nil, nil), nil
+		return true, testPod("prod", "pod-a", "uid-1", testAppName, "node-7", "img", nil, nil), nil
 	})
 
 	m := k8sattestation.NewWithClient(client, k8sattestation.Config{NegativeTTL: time.Hour, TTL: time.Hour})
@@ -335,7 +337,7 @@ func TestMapDoesNotCacheTransientErrors(t *testing.T) {
 // TestMapCacheRespectsTTL confirms that moving the injected clock
 // past TTL causes the next lookup to miss the cache and re-fetch.
 func TestMapCacheRespectsTTL(t *testing.T) {
-	pod := testPod("prod", "pod-a", "uid-1", "app", "node-7", "img", nil, nil)
+	pod := testPod("prod", "pod-a", "uid-1", testAppName, "node-7", "img", nil, nil)
 	client := fake.NewSimpleClientset(pod)
 	var gets atomic.Int64
 	client.PrependReactor("get", "pods", func(_ kubetesting.Action) (bool, runtime.Object, error) {

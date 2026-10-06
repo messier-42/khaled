@@ -16,7 +16,7 @@ func TestNewConfigSourceCreatesDiskSource(t *testing.T) {
 	}
 
 	args := plugin.ConfigSourceArgs{
-		PluginName: "disk",
+		PluginName: diskPlugin,
 	}
 	args.Disk.Path = path
 
@@ -35,13 +35,13 @@ func TestNewConfigSourceCreatesDiskSource(t *testing.T) {
 		t.Fatalf("expected policyEngine object")
 	}
 
-	if got, ok := policyEngine.GetString("use"); !ok || got != "cedar" {
+	if got, ok := policyEngine.GetString("use"); !ok || got != cedarEngine {
 		t.Fatalf("unexpected policyEngine.use: got %q, ok=%v", got, ok)
 	}
 }
 
 func TestNewConfigSourceRejectsUnsupportedPlugin(t *testing.T) {
-	_, err := plugin.NewConfigSource(plugin.ConfigSourceArgs{PluginName: "bogus"})
+	_, err := plugin.NewConfigSource(plugin.ConfigSourceArgs{PluginName: unknownPlugin})
 	if err == nil {
 		t.Fatalf("expected unsupported plugin to fail")
 	}

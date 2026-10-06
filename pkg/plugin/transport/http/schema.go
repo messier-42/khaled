@@ -6,6 +6,11 @@ import (
 	"github.com/messier-42/khaled/pkg/x509source"
 )
 
+const (
+	schemaTypeObject = "object"
+	schemaTypeString = "string"
+)
+
 // ListenerEntrySchema returns the JSON Schema fragment describing a
 // single `listeners[]` entry with `use: "http"`. The transport kind
 // does not use the `use:` discriminator at the top-level kind slot —
@@ -16,27 +21,27 @@ func ListenerEntrySchema() *jsonschema.Schema {
 	httpUse := any("http")
 
 	tlsBlock := &jsonschema.Schema{
-		Type: "object",
+		Type: schemaTypeObject,
 		Properties: map[string]*jsonschema.Schema{
-			"keylog":            {Type: "string"},
+			"keylog":            {Type: schemaTypeString},
 			"serverCertificate": x509source.Schema(),
 		},
 	}
 
 	return &jsonschema.Schema{
-		Type:     "object",
+		Type:     schemaTypeObject,
 		Required: []string{"use", "address"},
 		Properties: map[string]*jsonschema.Schema{
 			"use":     {Const: &httpUse},
-			"address": {Type: "string", MinLength: &minOne},
+			"address": {Type: schemaTypeString, MinLength: &minOne},
 			"http": {
-				Type: "object",
+				Type: schemaTypeObject,
 				Properties: map[string]*jsonschema.Schema{
 					"tls": tlsBlock,
 					// Graceful-shutdown grace period: how long srv.Shutdown
 					// waits for in-flight requests to drain. A Go duration
 					// string; time.ParseDuration does the real validation.
-					"shutdownGraceTime": {Type: "string", MinLength: &minOne},
+					"shutdownGraceTime": {Type: schemaTypeString, MinLength: &minOne},
 				},
 			},
 		},

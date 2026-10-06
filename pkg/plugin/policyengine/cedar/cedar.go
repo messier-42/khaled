@@ -15,6 +15,8 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 )
 
+const contextKeyNow = "now"
+
 // Entity types used in Cedar requests built from policyengine.Request.
 const (
 	entityTypePrincipal    = "Principal"
@@ -68,7 +70,7 @@ func (e *Engine) Close() error {
 // `context.now`.
 func (e *Engine) DecideEncapsulate(_ context.Context, req policyengine.EncapsulateRequest) (policyengine.Decision, error) {
 	ctxRec := cedar.NewRecord(cedar.RecordMap{
-		"now": cedar.Long(req.Now.UnixMicro()),
+		contextKeyNow: cedar.Long(req.Now.UnixMicro()),
 	})
 	return e.decide(req.Principal, req.AttributeSet, actionIDEncapsulate, ctxRec)
 }
@@ -81,7 +83,7 @@ func (e *Engine) DecideEncapsulate(_ context.Context, req policyengine.Encapsula
 // and the unauthenticated claimed originDomain. Foreign evaluation errors
 // deny access, including errors in forbid expressions alongside permits.
 func (e *Engine) DecideDecapsulate(_ context.Context, req policyengine.DecapsulateRequest) (policyengine.Decision, error) {
-	fields := cedar.RecordMap{"now": cedar.Long(req.Now.UnixMicro()), "federated": cedar.Boolean(req.Federated)}
+	fields := cedar.RecordMap{contextKeyNow: cedar.Long(req.Now.UnixMicro()), "federated": cedar.Boolean(req.Federated)}
 	if req.LeaseTime != nil && !req.Federated {
 		fields["leaseTime"] = cedar.Long(req.LeaseTime.UnixMicro())
 	}
@@ -100,7 +102,7 @@ func (e *Engine) DecideDecapsulate(_ context.Context, req policyengine.Decapsula
 // errors fail closed, including an erroneous forbid alongside a permit.
 func (e *Engine) DecideFederate(_ context.Context, req policyengine.FederateRequest) (policyengine.Decision, error) {
 	d, err := e.decide(req.Principal, req.AttributeSet, "Federate", cedar.NewRecord(cedar.RecordMap{
-		"now": cedar.Long(req.Now.UnixMicro()), "targetDomain": cedar.String(req.TargetDomain),
+		contextKeyNow: cedar.Long(req.Now.UnixMicro()), "targetDomain": cedar.String(req.TargetDomain),
 	}))
 	if len(d.Diagnostics) > 0 {
 		return policyengine.Decision{}, errors.New("cedar: federation policy evaluation failed")

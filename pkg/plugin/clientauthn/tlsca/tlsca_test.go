@@ -22,6 +22,11 @@ import (
 	"github.com/messier-42/khaled/pkg/plugin/clientauthn/tlsca"
 )
 
+const (
+	certificatePEMType = "CERTIFICATE"
+	spiffeScheme       = "spiffe"
+)
+
 // testCA is a self-signed CA used to issue leaf certs for the tests.
 // Mirrors the shape used by tlsspiffe_test.go but produces non-SPIFFE
 // leaves: callers control the SAN URIs / DNS names directly.
@@ -62,7 +67,7 @@ func (ca *testCA) writePEM(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ca.pem")
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: certificatePEMType, Bytes: ca.cert.Raw})
 	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
 		t.Fatalf("write ca pem: %v", err)
 	}
@@ -126,7 +131,7 @@ func TestNewRejectsBundleWithNoCertificates(t *testing.T) {
 func TestAuthenticateSuccess_SANURI(t *testing.T) {
 	ca := newTestCA(t)
 	chain := ca.issue(t,
-		[]*url.URL{{Scheme: "spiffe", Host: "example.org", Path: "/svc/a"}},
+		[]*url.URL{{Scheme: spiffeScheme, Host: "example.org", Path: "/svc/a"}},
 		nil, nil,
 	)
 	a, err := tlsca.New(ca.writePEM(t))
@@ -224,7 +229,7 @@ func TestAuthenticateRejectsNoPeerCert(t *testing.T) {
 
 func TestAuthenticateRejectsUntrustedCA(t *testing.T) {
 	issuerCA := newTestCA(t)
-	chain := issuerCA.issue(t, []*url.URL{{Scheme: "spiffe", Host: "x", Path: "/y"}}, nil, nil)
+	chain := issuerCA.issue(t, []*url.URL{{Scheme: spiffeScheme, Host: "x", Path: "/y"}}, nil, nil)
 
 	trustedCA := newTestCA(t)
 	a, _ := tlsca.New(trustedCA.writePEM(t))
@@ -243,7 +248,7 @@ func TestAuthenticateRejectsExpiredCert(t *testing.T) {
 		NotAfter:     time.Now().Add(-time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-		URIs:         []*url.URL{{Scheme: "spiffe", Host: "x", Path: "/y"}},
+		URIs:         []*url.URL{{Scheme: spiffeScheme, Host: "x", Path: "/y"}},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, &leafKey.PublicKey, ca.key)
 	if err != nil {
@@ -268,7 +273,7 @@ func TestAuthenticateRejectsLeafMissingClientAuthEKU(t *testing.T) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		// Server auth EKU only — leaf must be rejected for client use.
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		URIs:        []*url.URL{{Scheme: "spiffe", Host: "x", Path: "/y"}},
+		URIs:        []*url.URL{{Scheme: spiffeScheme, Host: "x", Path: "/y"}},
 	}
 	der, _ := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, &leafKey.PublicKey, ca.key)
 	leaf, _ := x509.ParseCertificate(der)
@@ -286,8 +291,8 @@ func TestNewParsesMultipleCertsInBundle(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bundle.pem")
 	bundle := append(
-		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caA.cert.Raw}),
-		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caB.cert.Raw})...,
+		pem.EncodeToMemory(&pem.Block{Type: certificatePEMType, Bytes: caA.cert.Raw}),
+		pem.EncodeToMemory(&pem.Block{Type: certificatePEMType, Bytes: caB.cert.Raw})...,
 	)
 	if err := os.WriteFile(path, bundle, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
@@ -298,7 +303,7 @@ func TestNewParsesMultipleCertsInBundle(t *testing.T) {
 	}
 	// Both CAs should be accepted as roots.
 	for i, ca := range []*testCA{caA, caB} {
-		chain := ca.issue(t, []*url.URL{{Scheme: "spiffe", Host: "example", Path: "/x"}}, nil, nil)
+		chain := ca.issue(t, []*url.URL{{Scheme: spiffeScheme, Host: "example", Path: "/x"}}, nil, nil)
 		r := &http.Request{TLS: &tls.ConnectionState{PeerCertificates: chain}}
 		if _, err := a.Authenticate(r); err != nil {
 			t.Errorf("ca %d: authenticate: %v", i, err)

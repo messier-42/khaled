@@ -40,9 +40,9 @@ type StarterSet struct {
 // can copy and selectively override.
 func MockStarterSet() StarterSet {
 	return StarterSet{
-		Monitoring: func(context.Context, monitoringsub.Config, monitoringsub.ReadyFunc) (*monitoringsub.Running, error) {
+		Monitoring: func(ctx context.Context, _ monitoringsub.Config, _ monitoringsub.ReadyFunc) (*monitoringsub.Running, error) {
 			// Disabled by default: an empty Config yields an inert Running.
-			return monitoringsub.New(context.Background(), monitoringsub.Config{}, nil)
+			return monitoringsub.New(ctx, monitoringsub.Config{}, nil)
 		},
 		Transport: func(context.Context, config.Snapshot, plugin.TransportDeps) (*transportsub.Running, error) {
 			return transportsub.NewEmpty(), nil

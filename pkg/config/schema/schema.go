@@ -47,6 +47,11 @@ import (
 	"github.com/messier-42/khaled/pkg/config"
 )
 
+const (
+	schemaTypeObject = "object"
+	pluginSelector   = "use"
+)
+
 // ValidateFunc is a custom validator invoked after structural JSON Schema
 // validation has passed. oldConfig is nil if a configuration is the first
 // configuration being loaded; it is otherwise passed as a non-nil value
@@ -167,7 +172,7 @@ func (r *Registry) RegisterPluginKindCommon(kind, propName string, schema *jsons
 	if propName == "" {
 		return errors.New("common property name must be non-empty")
 	}
-	if propName == "use" {
+	if propName == pluginSelector {
 		return fmt.Errorf("cannot override reserved property %q", propName)
 	}
 	if schema == nil {
@@ -273,7 +278,7 @@ func (r *Registry) buildAndGetValidators() (*jsonschema.Resolved, []ValidateFunc
 	}
 
 	combined := &jsonschema.Schema{
-		Type:       "object",
+		Type:       schemaTypeObject,
 		Properties: map[string]*jsonschema.Schema{},
 	}
 
@@ -343,7 +348,7 @@ func buildPluginKindSchema(entry *pluginKind) *jsonschema.Schema {
 	}
 
 	properties := map[string]*jsonschema.Schema{
-		"use": {Type: "string", Enum: enum},
+		pluginSelector: {Type: "string", Enum: enum},
 	}
 	for _, name := range variantNames {
 		if sub := entry.variants[name]; sub != nil {
@@ -355,9 +360,9 @@ func buildPluginKindSchema(entry *pluginKind) *jsonschema.Schema {
 	}
 
 	kindSchema := &jsonschema.Schema{
-		Type:       "object",
+		Type:       schemaTypeObject,
 		Properties: properties,
-		Required:   []string{"use"},
+		Required:   []string{pluginSelector},
 	}
 
 	for _, name := range variantNames {
@@ -378,9 +383,9 @@ func buildPluginKindSchema(entry *pluginKind) *jsonschema.Schema {
 		kindSchema.AllOf = append(kindSchema.AllOf, &jsonschema.Schema{
 			If: &jsonschema.Schema{
 				Properties: map[string]*jsonschema.Schema{
-					"use": {Const: &useConst},
+					pluginSelector: {Const: &useConst},
 				},
-				Required: []string{"use"},
+				Required: []string{pluginSelector},
 			},
 			Then: &jsonschema.Schema{
 				Required: []string{name},
@@ -422,7 +427,7 @@ func mergePath(root *jsonschema.Schema, path string, sub *jsonschema.Schema) err
 		}
 		child, ok := cur.Properties[part]
 		if !ok {
-			child = &jsonschema.Schema{Type: "object", Properties: map[string]*jsonschema.Schema{}}
+			child = &jsonschema.Schema{Type: schemaTypeObject, Properties: map[string]*jsonschema.Schema{}}
 			cur.Properties[part] = child
 		}
 		cur = child

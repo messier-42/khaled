@@ -4,6 +4,8 @@ import (
 	"github.com/messier-42/khaled/pkg/health"
 )
 
+const notStartedDetail = "not started"
+
 // readyFunc builds the readiness check set for the /readyz endpoint.
 //
 // The returned closure captures the Server pointer, so it can be built
@@ -47,7 +49,7 @@ func (s *Server) checkSPIFFE() health.CheckResult {
 
 	mgr := s.spiffeSrc.Load()
 	if mgr == nil {
-		return health.CheckResult{Name: name, OK: false, Detail: "not started"}
+		return health.CheckResult{Name: name, OK: false, Detail: notStartedDetail}
 	}
 	src := mgr.Current()
 	if src == nil {
@@ -68,7 +70,7 @@ func (s *Server) checkKeyserver() health.CheckResult {
 
 	mgr := s.keyserverMgr.Load()
 	if mgr == nil {
-		return health.CheckResult{Name: name, OK: false, Detail: "not started"}
+		return health.CheckResult{Name: name, OK: false, Detail: notStartedDetail}
 	}
 	stack := mgr.Current()
 	if !stack.Healthy() {
@@ -83,7 +85,7 @@ func (s *Server) checkTransports() health.CheckResult {
 
 	tr := s.transports.Load()
 	if tr == nil {
-		return health.CheckResult{Name: name, OK: false, Detail: "not started"}
+		return health.CheckResult{Name: name, OK: false, Detail: notStartedDetail}
 	}
 	if !tr.Ready() {
 		return health.CheckResult{Name: name, OK: false, Detail: "a listener is not bound"}

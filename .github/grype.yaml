@@ -1,3 +1,11 @@
+ignore:
+  # This advisory affects only golang.org/x/crypto/openpgp and its subpackages.
+  # khaled doesn't use it.
+  - vulnerability: GO-2026-5932
+    package:
+      name: golang.org/x/crypto
+      type: go-module
+
 exclude:
   - "./build"
   - "./ATTIC"

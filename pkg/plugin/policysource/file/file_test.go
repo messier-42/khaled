@@ -399,7 +399,11 @@ func TestConcurrentReloadAndCurrent(t *testing.T) {
 			select {
 			case <-stopCh:
 				return
-			case <-src.UpdateChan():
+			case err := <-src.UpdateChan():
+				if err != nil {
+					t.Errorf("reload: %v", err)
+					return
+				}
 			}
 		}
 	})

@@ -2,6 +2,17 @@
 title: khaled
 description: A reference implementation of a CABE Key Server.
 template: splash
+head:
+  - tag: title
+    content: khaled — A CABE Key Server
+  - tag: meta
+    attrs:
+      property: og:title
+      content: khaled — A CABE Key Server
+  - tag: meta
+    attrs:
+      property: og:type
+      content: website
 hero:
   tagline: A pluggable reference implementation of a CABE Key Server.
   actions:
@@ -10,7 +21,7 @@ hero:
       icon: right-arrow
     - text: About CABE
       link: https://cabespec.org/
-      variant: minimal
+      variant: secondary
       icon: external
 ---
 
@@ -22,6 +33,7 @@ authorized clients according to a centrally managed policy, to facilitate
 managed encryption and decryption of arbitrary objects according to the
 principles of Attribute-Based Access Control (ABAC).
 
+<div className="khaled-capabilities">
 <CardGrid>
   <Card title="Pluggable" icon="puzzle">
     khaled features seven plugin types including client authentication,
@@ -33,7 +45,7 @@ principles of Attribute-Based Access Control (ABAC).
     khaled serves as a centerpiece of a CABE deployment, enabling clients
     to encapsulate and de-encapsulate information using <a href="https://cabespec.org/">CABE</a>.
   </Card>
-  <Card title="SPIFFE and Kubernetes-aware" icon="seti:kubernetes">
+  <Card title="SPIFFE and Kubernetes-aware" icon="setting">
     khaled is able to authenticate clients using X.509-SVIDs in a SPIFFE-enabled Kubernetes or
     non-Kubernetes SPIFFE infrastructure environment, and can perform Kubernetes-aware attestation
     to gate access to keys based on policy expressed over Kubernetes pod metadata such as labels,
@@ -45,8 +57,11 @@ principles of Attribute-Based Access Control (ABAC).
     Cedar plugin for an alternative of your choice.
   </Card>
 </CardGrid>
+</div>
 
 ## Start here
+
+Explore the architecture, key schedule and configuration reference.
 
 <CardGrid>
   <LinkCard title="What is khaled?" href="/overview/what-is/"
@@ -55,6 +70,8 @@ principles of Attribute-Based Access Control (ABAC).
     description="khaled's plugin-based architecture."/>
   <LinkCard title="Key Schedule" href="/overview/key-schedule/"
     description="How khaled manages the key schedule."/>
+  <LinkCard title="Configuration" href="/reference/config/"
+    description="Configure a khaled Key Server and its plugins."/>
   {/*<LinkCard title="Deployment Guide" href="/guides/deployment/"
     description="How to deploy khaled and establish a CABE domain."/>*/}
 </CardGrid>

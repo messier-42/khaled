@@ -1,7 +1,6 @@
 // @ts-check
 import {defineConfig} from 'astro/config';
 import starlight from '@astrojs/starlight';
-import starlightThemeFlexoki from 'starlight-theme-flexoki';
 import {releaseInfoRoot} from './src/lib/releases';
 
 const sidebar = [
@@ -47,14 +46,30 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'khaled',
-      plugins: [starlightThemeFlexoki()],
+      description: 'A pluggable reference implementation of a CABE Key Server.',
+      customCss: ['./src/styles/cabe.css'],
+      components: {
+        SocialIcons: './src/components/ProjectLinks.astro',
+        Footer: './src/components/DocsFooter.astro',
+      },
+      expressiveCode: {
+        themes: ['github-dark', 'github-light'],
+      },
+      social: [{icon: 'github', label: 'Khaled on GitHub', href: 'https://github.com/messier-42/khaled'}],
       logo: {
-        src: './src/assets/khaled-logo-auto.svg',
+        src: './src/assets/khaled-logo.svg',
         replacesTitle: true,
       },
 
       favicon: '/favicon/favicon.ico',
       head: [
+        {tag: 'meta', attrs: {property: 'og:image', content: 'https://khaled.cabespec.org/social/khaled-preview.png'}},
+        {tag: 'meta', attrs: {property: 'og:image:type', content: 'image/png'}},
+        {tag: 'meta', attrs: {property: 'og:image:width', content: '1200'}},
+        {tag: 'meta', attrs: {property: 'og:image:height', content: '630'}},
+        {tag: 'meta', attrs: {property: 'og:image:alt', content: 'Khaled: a pluggable CABE Key Server. Clients obtain key material under an access policy.'}},
+        {tag: 'meta', attrs: {name: 'twitter:image', content: 'https://khaled.cabespec.org/social/khaled-preview.png'}},
+        {tag: 'meta', attrs: {name: 'twitter:image:alt', content: 'Khaled: a pluggable CABE Key Server. Clients obtain key material under an access policy.'}},
         {
           tag: 'link',
           attrs: {

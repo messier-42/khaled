@@ -102,11 +102,11 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 			t.Fatalf("policy bypass: %v", e)
 		}
 		audit = auditRecord(t, auditBuf)
-		verdict := "deny"
+		verdict := auditDecisionDeny
 		if d.Allow {
 			verdict = auditDecisionAllow
 		}
-		if audit["policyDecision"] != verdict || audit["outcome"] != "denied" || audit["operation"] != auditOperationRetrograde {
+		if audit["policyDecision"] != verdict || audit["outcome"] != auditOutcomeDenied || audit["operation"] != auditOperationRetrograde {
 			t.Fatalf("misleading federated denial: %v", audit)
 		}
 		if _, ok := audit["leaseExpiry"]; ok {

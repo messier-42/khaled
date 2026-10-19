@@ -20,6 +20,10 @@ import (
 )
 
 const (
+	auditOperationPrograde   = "Prograde"
+	auditDecisionDeny        = "deny"
+	auditOutcomeDenied       = "denied"
+	auditAttributeName       = "classification"
 	auditOperationRetrograde = "Retrograde"
 	auditDecisionAllow       = "allow"
 	auditOutcomeSuccess      = "success"
@@ -61,14 +65,14 @@ func TestKeyAccessAudit(t *testing.T) {
 		operation, decision, outcome string
 		captive                      bool
 	}{
-		{"Prograde", auditDecisionAllow, auditOutcomeSuccess, false},
-		{"Prograde", "deny", "denied", false},
+		{auditOperationPrograde, auditDecisionAllow, auditOutcomeSuccess, false},
+		{auditOperationPrograde, auditDecisionDeny, auditOutcomeDenied, false},
 		{auditOperationRetrograde, auditDecisionAllow, auditOutcomeSuccess, true},
-		{auditOperationRetrograde, "deny", "denied", true},
+		{auditOperationRetrograde, auditDecisionDeny, auditOutcomeDenied, true},
 	} {
 		t.Run(tc.operation+"/"+tc.outcome, func(t *testing.T) {
 			f := newFixture(t)
-			as := mustSet(t, map[string]any{"classification": auditAttributeValue, "project": "audit"})
+			as := mustSet(t, map[string]any{auditAttributeName: auditAttributeValue, "project": "audit"})
 			var ref []byte
 			if tc.operation == auditOperationRetrograde {
 				seed, err := f.srv.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as})
@@ -87,7 +91,7 @@ func TestKeyAccessAudit(t *testing.T) {
 			ctx = klog.WithClientIP(ctx, netip.MustParseAddr("192.0.2.1"))
 			var lease keyserver.Lease
 			var err error
-			if tc.operation == "Prograde" {
+			if tc.operation == auditOperationPrograde {
 				resp, e := f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as, ARINToken: []byte("arin-secret")})
 				lease, err = resp.Lease, e
 			} else {
@@ -141,28 +145,29 @@ func TestKeyAccessAudit(t *testing.T) {
 func TestAuditOptionalDetailsAndRedaction(t *testing.T) {
 	const (
 		credential = "credential-secret"
+		tokenClaim = "authToken"
 		policyA    = "policy-a"
 		policyB    = "policy-b"
 	)
 	f := newFixture(t)
-	cfg := klog.AuditConfig{PrincipalClaims: []string{auditClaimTeam, "authToken"}, ClientIP: true, FullAttributeSet: true, PolicyHashes: true, Diagnostics: true}
+	cfg := klog.AuditConfig{PrincipalClaims: []string{auditClaimTeam, tokenClaim}, ClientIP: true, FullAttributeSet: true, PolicyHashes: true, Diagnostics: true}
 	f.srv.SetAuditConfig(cfg)
 	cfg.PrincipalClaims[0] = "unlisted" // Server must own its allowlist.
-	f.principal.Claims = map[string]any{auditClaimTeam: "blue", "unlisted": "omit-me", "authToken": credential}
+	f.principal.Claims = map[string]any{auditClaimTeam: "blue", "unlisted": "omit-me", tokenClaim: credential}
 	f.engine.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) {
 		return policyengine.Decision{Allow: true, DeterminingPolicies: []string{policyB, policyA, policyA}, Reason: credential, Diagnostics: []string{"token-secret"}}, nil
 	}
 	buf := captureAudit(t)
 	ctx := klog.WithClientIP(t.Context(), netip.MustParseAddr("2001:db8::1"))
-	as := mustSet(t, map[string]any{"classification": auditAttributeValue, "credentials": "attribute-secret"})
+	as := mustSet(t, map[string]any{auditAttributeName: auditAttributeValue, "credentials": "attribute-secret"})
 	if _, err := f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as, ARINToken: []byte("arin-secret")}); err != nil {
 		t.Fatal(err)
 	}
 	r := auditRecord(t, buf)
 	want := map[string]any{
 		"clientIP":                "2001:db8::1",
-		"principalClaims":         map[string]any{auditClaimTeam: "blue", "authToken": "[REDACTED]"},
-		"attributeSet":            map[string]any{"classification": auditAttributeValue, "credentials": "[REDACTED]"},
+		"principalClaims":         map[string]any{auditClaimTeam: "blue", tokenClaim: "[REDACTED]"},
+		"attributeSet":            map[string]any{auditAttributeName: auditAttributeValue, "credentials": "[REDACTED]"},
 		"determiningPolicyHashes": []any{digestForTest(policyB), digestForTest(policyA)},
 		"diagnosticCount":         float64(1), "diagnosticHashes": []any{digestForTest("token-secret")},
 		"reasonHash": digestForTest(credential),

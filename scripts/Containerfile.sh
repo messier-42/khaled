@@ -16,7 +16,7 @@ case "$APP_NAME" in
     ;;
 esac
 
-echo 'FROM docker.io/golang:1-alpine AS builder'
+echo 'FROM docker.io/golang:1.27.2-alpine AS builder'
 
 echo 'RUN apk add --no-cache ca-certificates git'
 echo 'ARG TARGETOS'

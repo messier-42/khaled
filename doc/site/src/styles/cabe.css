@@ -1,0 +1,190 @@
+/* CABE's visual language, adapted to Starlight's documentation layout.
+   Starlight uses white for foreground and black for background in both themes. */
+:root {
+  --sl-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --sl-font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --sl-color-white: #eef1f5;
+  --sl-color-gray-1: #e1e5eb;
+  --sl-color-gray-2: #c8ced7;
+  --sl-color-gray-3: #a2acb9;
+  --sl-color-gray-4: #6c7786;
+  --sl-color-gray-5: #3a4452;
+  --sl-color-gray-6: #29313c;
+  --sl-color-black: #15191f;
+  --sl-color-accent-low: #1c2e43;
+  --sl-color-accent: #85b9ec;
+  --sl-color-accent-high: #bad8f5;
+  --sl-color-bg-nav: #15191f;
+  --sl-color-bg-sidebar: #1b2028;
+  --sl-color-bg-inline-code: #242c37;
+  --sl-color-hairline-light: #303944;
+  --sl-color-hairline: #3a4452;
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--sl-color-accent);
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: 0 12px 40px #0003;
+  --sl-text-body: 1rem;
+  --sl-text-h1: clamp(2rem, 3.2vw, 2.75rem);
+  --sl-text-h2: 1.8125rem;
+  --sl-text-h3: 1.375rem;
+  --sl-text-h4: 1.125rem;
+  --sl-line-height: 1.75;
+  --sl-line-height-headings: 1.25;
+  --sl-nav-height: 4.75rem;
+  --sl-content-width: 47rem;
+  --sl-sidebar-width: 17rem;
+  --cabe-soft: #1b2028;
+  --cabe-blue-soft: #1c2e43;
+  --cabe-blue-line: #496787;
+}
+
+:root[data-theme='light'] {
+  --sl-color-white: #181a1d;
+  --sl-color-gray-1: #30343a;
+  --sl-color-gray-2: #454b54;
+  --sl-color-gray-3: #5f6670;
+  --sl-color-gray-4: #68717c;
+  --sl-color-gray-5: #cbd2da;
+  --sl-color-gray-6: #e1e5e9;
+  --sl-color-gray-7: #f7f8fa;
+  --sl-color-black: #fff;
+  --sl-color-accent-low: #f1f6fc;
+  --sl-color-accent: #265f99;
+  --sl-color-accent-high: #234f7e;
+  --sl-color-bg-nav: #fff;
+  --sl-color-bg-sidebar: #f7f8fa;
+  --sl-color-bg-inline-code: #f0f2f5;
+  --sl-color-hairline-light: #e1e5e9;
+  --sl-color-hairline: #cbd2da;
+  --cabe-soft: #f7f8fa;
+  --cabe-blue-soft: #f1f6fc;
+  --cabe-blue-line: #afc5df;
+}
+
+/* Keep the wordmark in sync with the selected theme, including manual overrides. */
+:root[data-theme='dark'] .site-title img { filter: brightness(0) invert(1); }
+.site-title img { height: 3rem; }
+a { text-underline-offset: 0.2em; }
+:focus-visible { outline: 3px solid var(--sl-color-accent); outline-offset: 4px; }
+h1, h2, h3, h4, h5, h6 { font-weight: 600; }
+h1 { letter-spacing: -0.045em; }
+h2 { letter-spacing: -0.035em; }
+h3 { letter-spacing: -0.02em; }
+
+.cabe-project-link {
+  color: var(--sl-color-white);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cabe-project-link:hover { color: var(--sl-color-text-accent); }
+header .social-icons { gap: 1.25rem; }
+site-search button[data-open-modal] { border-radius: 6px; }
+.sidebar-content a[aria-current='page'] {
+  background: var(--cabe-blue-soft);
+  color: var(--sl-color-text-accent);
+  font-weight: 600;
+}
+.sidebar-content a { border-radius: 4px; }
+
+.sl-markdown-content :not(pre) > code { border-radius: 4px; padding: 0.15em 0.35em; }
+.sl-markdown-content table { font-size: 0.9375rem; }
+.sl-markdown-content th { background: var(--cabe-soft); }
+.sl-markdown-content blockquote { border-color: var(--cabe-blue-line); }
+.expressive-code { --ec-brdRad: 8px; }
+
+/* Home: generous whitespace and quiet, consistent component borders. */
+[data-has-hero] .main-pane { --sl-content-width: 72.5rem; }
+[data-has-hero] .hero {
+  grid-template-columns: 1fr;
+  padding-block: clamp(2.5rem, 6vw, 5rem) 2.5rem;
+}
+[data-has-hero] .hero .stack { text-align: start; gap: 1.75rem; }
+[data-has-hero] .hero .copy { align-items: flex-start; gap: 1.125rem; }
+[data-has-hero] .hero h1 {
+  font-size: clamp(3rem, 6vw, 4.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.052em;
+}
+[data-has-hero] .hero .tagline {
+  max-width: 30ch;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+  color: var(--sl-color-gray-2);
+}
+[data-has-hero] .hero .actions { justify-content: flex-start; gap: 0.75rem; }
+.sl-link-button {
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+}
+.sl-link-button.primary {
+  background: var(--sl-color-white);
+  border-color: var(--sl-color-white);
+  color: var(--sl-color-black);
+}
+.sl-link-button.secondary { border-color: var(--sl-color-hairline); }
+.sl-link-button:hover { opacity: 0.85; }
+[data-has-hero] .sl-markdown-content > p { max-width: 76ch; }
+[data-has-hero] .sl-markdown-content > .sl-heading-wrapper { margin-top: 3.5rem; }
+.khaled-capabilities { margin-top: 2.5rem; }
+.khaled-capabilities .card {
+  border-color: var(--sl-color-hairline-light);
+  border-radius: 8px;
+  background: var(--cabe-soft);
+  padding: 1.5rem;
+  gap: 1rem;
+}
+.khaled-capabilities .card .title { font-size: 1.125rem; gap: 0.75rem; }
+.khaled-capabilities .card .icon {
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--sl-color-text-accent);
+}
+.khaled-capabilities .card .body { font-size: 0.9375rem; }
+.sl-link-card, .pagination-links a { border-color: var(--sl-color-hairline-light); box-shadow: none; }
+.sl-link-card:hover, .pagination-links a:hover {
+  border-color: var(--cabe-blue-line);
+  background: var(--cabe-blue-soft);
+}
+.pagination-links .link-title { font-size: 1.125rem; font-weight: 600; }
+.cabe-docs-footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+  border-top: 1px solid var(--sl-color-hairline-light);
+  padding-top: 1.5rem;
+  margin-top: 2rem;
+  color: var(--sl-color-gray-3);
+  font-size: 0.8125rem;
+}
+.cabe-docs-footer p { margin: 0; }
+.cabe-docs-footer nav { display: flex; flex-wrap: wrap; gap: 1rem; }
+.cabe-docs-footer a { color: inherit; }
+.cabe-docs-footer a:hover { color: var(--sl-color-text-accent); }
+
+@media (max-width: 49.99rem) {
+  :root { --sl-nav-height: 4.0625rem; }
+  .site-title img { height: 2.5rem; }
+  [data-has-hero] .hero { padding-top: 1.5rem; }
+  /* Splash pages have no mobile sidebar; keep their theme picker reachable. */
+  [data-has-hero] header .header { gap: 0.75rem; }
+  [data-has-hero] header .title-wrapper { flex: 1; }
+  [data-has-hero] header .right-group { display: flex; }
+  [data-has-hero] header .social-icons { display: none; }
+  .khaled-capabilities .card { padding: 1.25rem; }
+  /* Starlight's table container scrolls; keep schema names and descriptions readable. */
+  .sl-markdown-content :is(th, td) { min-width: 10rem; }
+  .sl-markdown-content :is(th, td):last-child { min-width: 20rem; }
+}
+@media print {
+  .site-title img { filter: none !important; }
+  .cabe-docs-footer { display: none; }
+}

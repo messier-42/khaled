@@ -242,7 +242,10 @@ func TestCloseRacesRunNoDataRace(t *testing.T) {
 		_ = tr.Close()
 
 		select {
-		case <-runDone:
+		case runErr := <-runDone:
+			if runErr != nil {
+				t.Fatalf("Run returned after Close (iteration %d): %v", i, runErr)
+			}
 		case <-time.After(2 * time.Second):
 			t.Fatalf("Run did not return after Close (iteration %d)", i)
 		}
@@ -384,7 +387,9 @@ func TestKeyLogFileIsAppended(t *testing.T) {
 	}
 
 	cancel()
-	<-done
+	if runErr := <-done; runErr != nil {
+		t.Fatalf("run returned: %v", runErr)
+	}
 
 	info, err := os.Stat(keylogPath)
 	if err != nil {

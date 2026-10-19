@@ -73,7 +73,7 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 		t.Fatal(e)
 	}
 	audit := auditRecord(t, auditBuf)
-	if audit["outcome"] != "success" || audit["policyDecision"] != "allow" || audit["operation"] != "Retrograde" {
+	if audit["outcome"] != auditOutcomeSuccess || audit["policyDecision"] != auditDecisionAllow || audit["operation"] != auditOperationRetrograde {
 		t.Fatal(audit)
 	}
 	auditBuf.Reset()
@@ -92,7 +92,7 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 	if _, e = target.srv.Retrograde(t.Context(), req); e != nil {
 		t.Fatal("empty known-package request", e)
 	}
-	if auditRecord(t, auditBuf)["outcome"] != "success" {
+	if auditRecord(t, auditBuf)["outcome"] != auditOutcomeSuccess {
 		t.Fatal("cached foreign access missing audit")
 	}
 	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}} {

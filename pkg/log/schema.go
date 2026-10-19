@@ -2,9 +2,15 @@ package log
 
 import (
 	"encoding/json"
+
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/messier-42/khaled/pkg/config/schema"
+)
+
+const (
+	schemaTypeString  = "string"
+	schemaTypeBoolean = "boolean"
 )
 
 // RegisterSchema contributes the top-level `logging` block schema to r.
@@ -22,19 +28,19 @@ func RegisterSchema(r *schema.Registry) error {
 				Type:                 "object",
 				AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 				Properties: map[string]*jsonschema.Schema{
-					"principalClaims":  {Type: "array", Default: json.RawMessage("[]"), Items: &jsonschema.Schema{Type: "string", MinLength: new(1)}},
-					"clientIP":         {Type: "boolean", Default: json.RawMessage("false")},
-					"fullAttributeSet": {Type: "boolean", Default: json.RawMessage("false")},
-					"policyHashes":     {Type: "boolean", Default: json.RawMessage("false")},
-					"diagnostics":      {Type: "boolean", Default: json.RawMessage("false")},
+					auditPrincipalClaims: {Type: "array", Default: json.RawMessage("[]"), Items: &jsonschema.Schema{Type: schemaTypeString, MinLength: new(1)}},
+					"clientIP":           {Type: schemaTypeBoolean, Default: json.RawMessage("false")},
+					"fullAttributeSet":   {Type: schemaTypeBoolean, Default: json.RawMessage("false")},
+					"policyHashes":       {Type: schemaTypeBoolean, Default: json.RawMessage("false")},
+					"diagnostics":        {Type: schemaTypeBoolean, Default: json.RawMessage("false")},
 				},
 			},
 			"format": {
-				Type: "string",
+				Type: schemaTypeString,
 				Enum: []any{"json", "text"},
 			},
 			"severity": {
-				Type: "string",
+				Type: schemaTypeString,
 				Enum: []any{"debug", "info", "warn", "error"},
 			},
 		},

@@ -2,11 +2,17 @@ package log
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"strings"
 
 	"github.com/messier-42/khaled/pkg/config"
+)
+
+const (
+	auditRedacted        = "[REDACTED]"
+	auditPrincipalClaims = "principalClaims"
 )
 
 // AuditConfig selects optional key-access audit fields. The zero value emits
@@ -30,20 +36,20 @@ func AuditConfigFromSnapshot(snap config.Snapshot) (AuditConfig, error) {
 	}
 	block, ok := raw.(config.Map)
 	if !ok {
-		return cfg, fmt.Errorf("logging.audit must be an object")
+		return cfg, errors.New("logging.audit must be an object")
 	}
 	for name, value := range block {
 		var dest *bool
 		switch name {
-		case "principalClaims":
+		case auditPrincipalClaims:
 			list, ok := value.(config.Array)
 			if !ok {
-				return cfg, fmt.Errorf("logging.audit.principalClaims must be an array of strings")
+				return cfg, errors.New("logging.audit.principalClaims must be an array of strings")
 			}
 			for _, item := range list {
 				name, ok := item.(string)
 				if !ok || name == "" {
-					return cfg, fmt.Errorf("logging.audit.principalClaims must contain non-empty strings")
+					return cfg, errors.New("logging.audit.principalClaims must contain non-empty strings")
 				}
 				cfg.PrincipalClaims = append(cfg.PrincipalClaims, name)
 			}
@@ -91,7 +97,6 @@ func AuditValue(name string, value any) any {
 }
 
 func auditValue(name string, value any, depth int) any {
-	const redacted = "[REDACTED]"
 	normalized := strings.ToLower(strings.Map(func(r rune) rune {
 		if r == '-' || r == '_' || r == '.' {
 			return -1
@@ -100,11 +105,11 @@ func auditValue(name string, value any, depth int) any {
 	}, name))
 	for _, secret := range []string{"token", "password", "credential", "secret", "privatekey", "leasekey", "plaintext", "authorization", "cookie", "lkat"} {
 		if strings.Contains(normalized, secret) {
-			return redacted
+			return auditRedacted
 		}
 	}
 	if normalized == "key" || normalized == "cek" || depth > 16 {
-		return redacted
+		return auditRedacted
 	}
 	switch v := value.(type) {
 	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
@@ -124,6 +129,6 @@ func auditValue(name string, value any, depth int) any {
 	case []string:
 		return append([]string(nil), v...)
 	default:
-		return redacted
+		return auditRedacted
 	}
 }

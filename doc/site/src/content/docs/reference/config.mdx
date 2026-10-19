@@ -221,12 +221,16 @@ spiffe:
 # from the bootstrapping logger settings specified at launch as soon
 # as the config is first loaded.
 logging:
-  # Required. String. Log output format; either "text" or "json".
-  format: "text"
+  # Optional. String. Log output format; either "text" or "json".
+  # Built-in default: "json". JSON is recommended for audit collection.
+  format: "json"
 
-  # Required. String. Log output severity; one of "debug", "info",
-  # "warn" or "error".
-  severity: "debug"
+  # Optional. String. Minimum severity: "debug", "info", "warn", "error".
+  # Built-in default: "error". Select "info" to collect key-access audits.
+  severity: "info"
+
+  # Optional. Audit detail; see "Audit detail" below for its schema.
+  audit: {}
 
 # Required. Listener configuration. It is mandatory to specify at least
 # one listener.
@@ -314,3 +318,29 @@ Keys are retained in the existing SQLite key store, not in configuration files.
 | `peers[].url` | HTTPS CKAP base URL for public discovery, mutually exclusive with `identity`. |
 | `peers[].caFile` | Optional PEM CA file for discovery TLS; requires `url`. |
 
+## Audit detail
+
+`logging.audit` is an optional object. All properties are optional; unknown
+properties and invalid types are rejected.
+
+| Property | Type | Default |
+| --- | --- | --- |
+| `principalClaims` | Array of nonempty strings (exact claim names) | `[]` |
+| `clientIP` | Boolean | `false` |
+| `fullAttributeSet` | Boolean | `false` |
+| `policyHashes` | Boolean | `false` |
+| `diagnostics` | Boolean | `false` |
+
+Minimal logging block for audit collection with default detail, to add to an
+otherwise valid server configuration:
+
+```yaml
+logging:
+  format: json
+  severity: info
+```
+
+Omitting `audit` or using `audit: {}` selects the defaults above. The built-in
+logger defaults are `format: json` and `severity: error`; select
+`severity: info` to collect audit events. See [Audit Logging](/reference/audit-logging/) for field
+meanings, optional detail, redaction, reload behavior, and collection examples.

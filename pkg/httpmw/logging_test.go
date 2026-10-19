@@ -322,3 +322,37 @@ func TestCorrelationIDPropagatesToHandlerLog(t *testing.T) {
 		t.Errorf("handler log correlationID %q != receive %q", inner["correlationID"], recv["correlationID"])
 	}
 }
+
+func TestClientIPIsPrivateContextMetadata(t *testing.T) {
+	for _, remote := range []string{"192.0.2.10:1234", "[2001:db8::10]:1234", "invalid"} {
+		t.Run(remote, func(t *testing.T) {
+			var buf bytes.Buffer
+			defer newCapturingLogger(t, &buf, slog.LevelInfo)()
+			h := httpmw.Logging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ip, ok := klog.ClientIP(r.Context())
+				if remote == "invalid" {
+					if ok {
+						t.Fatal("invalid remote accepted")
+					}
+				} else if !ok || !strings.Contains(remote, ip.String()) {
+					t.Fatalf("wrong peer %v", ip)
+				}
+				slog.InfoContext(r.Context(), "diagnostic")
+			}))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+			req.RemoteAddr = remote
+			req.Header.Set("X-Forwarded-For", "203.0.113.100")
+			h.ServeHTTP(httptest.NewRecorder(), req)
+			recs := parseRecords(t, &buf)
+			if len(recs) != 1 {
+				t.Fatal(recs)
+			}
+			if _, ok := recs[0]["clientIP"]; ok {
+				t.Fatal("peer leaked into ordinary context attributes")
+			}
+			if strings.Contains(buf.String(), "203.0.113.100") {
+				t.Fatal("forwarded header logged")
+			}
+		})
+	}
+}

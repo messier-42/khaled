@@ -67,10 +67,16 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 		}
 		return policyengine.Decision{Allow: true}, nil
 	}
+	auditBuf := captureAudit(t)
 	got, e := target.srv.Retrograde(t.Context(), req)
 	if e != nil {
 		t.Fatal(e)
 	}
+	audit := auditRecord(t, auditBuf)
+	if audit["outcome"] != auditOutcomeSuccess || audit["policyDecision"] != auditDecisionAllow || audit["operation"] != auditOperationRetrograde {
+		t.Fatal(audit)
+	}
+	auditBuf.Reset()
 	a, e := key.MarshalCBOR(pro.Lease.LKAI.NonCaptive.LeaseKey)
 	if e != nil {
 		t.Fatal(e)
@@ -86,10 +92,25 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 	if _, e = target.srv.Retrograde(t.Context(), req); e != nil {
 		t.Fatal("empty known-package request", e)
 	}
-	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}} {
+	if auditRecord(t, auditBuf)["outcome"] != auditOutcomeSuccess {
+		t.Fatal("cached foreign access missing audit")
+	}
+	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}, {Allow: true, Diagnostics: []string{"sensitive diagnostic"}}} {
+		auditBuf.Reset()
 		target.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) { return d, nil }
 		if _, e = target.srv.Retrograde(t.Context(), req); !errors.Is(e, keyserver.ErrDenied) {
 			t.Fatalf("policy bypass: %v", e)
+		}
+		audit = auditRecord(t, auditBuf)
+		verdict := auditDecisionDeny
+		if d.Allow {
+			verdict = auditDecisionAllow
+		}
+		if audit["policyDecision"] != verdict || audit["outcome"] != auditOutcomeDenied || audit["operation"] != auditOperationRetrograde {
+			t.Fatalf("misleading federated denial: %v", audit)
+		}
+		if _, ok := audit["leaseExpiry"]; ok {
+			t.Fatal("denied foreign access has expiry")
 		}
 	}
 	target.engine.decap = nil

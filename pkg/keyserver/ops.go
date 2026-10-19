@@ -24,7 +24,11 @@ func (s *Server) currentPolicy() (policyengine.Engine, error) {
 }
 
 // Prograde implements CKAP Prograde Key Resolution.
-func (s *Server) Prograde(ctx context.Context, req ProgradeRequest) (ProgradeResponse, error) {
+func (s *Server) Prograde(ctx context.Context, req ProgradeRequest) (resp ProgradeResponse, retErr error) {
+	audit := accessAudit{config: s.audit.Load()}
+	defer func() {
+		s.auditAccess(ctx, audit, "Prograde", req.Principal, req.AttributeSet, resp.Lease.Expiry, retErr)
+	}()
 	now := s.now().UTC()
 	pol, err := s.currentPolicy()
 	if err != nil {
@@ -36,11 +40,12 @@ func (s *Server) Prograde(ctx context.Context, req ProgradeRequest) (ProgradeRes
 		AttributeSet: req.AttributeSet,
 		Now:          now,
 	})
+	audit.decided(decision, err)
 	if err != nil {
 		return ProgradeResponse{}, fmt.Errorf("keyserver: Prograde: policy: %w", err)
 	}
 	if !decision.Allow {
-		return ProgradeResponse{}, deniedErr(ctx, "Prograde", req.Principal.URI, decision)
+		return ProgradeResponse{}, ErrDenied
 	}
 
 	lki, err := s.schedule.NewLease(ctx, req.AttributeSet)
@@ -87,7 +92,11 @@ func (s *Server) Prograde(ctx context.Context, req ProgradeRequest) (ProgradeRes
 }
 
 // Retrograde implements CKAP Retrograde Key Resolution.
-func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (RetrogradeResponse, error) {
+func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (resp RetrogradeResponse, retErr error) {
+	audit := accessAudit{config: s.audit.Load()}
+	defer func() {
+		s.auditAccess(ctx, audit, "Retrograde", req.Principal, req.AttributeSet, resp.Lease.Expiry, retErr)
+	}()
 	now := s.now().UTC()
 	pol, err := s.currentPolicy()
 	if err != nil {
@@ -104,7 +113,7 @@ func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (Retrogr
 			if fed == nil {
 				return RetrogradeResponse{}, ErrInvalidRef
 			}
-			return s.foreignRetrograde(ctx, pol, fed, req, now)
+			return s.foreignRetrograde(ctx, pol, fed, req, now, &audit)
 		}
 	}
 
@@ -120,11 +129,12 @@ func (s *Server) Retrograde(ctx context.Context, req RetrogradeRequest) (Retrogr
 		Now:          now,
 		LeaseTime:    &info.Time,
 	})
+	audit.decided(decision, err)
 	if err != nil {
 		return RetrogradeResponse{}, fmt.Errorf("keyserver: Retrograde: policy: %w", err)
 	}
 	if !decision.Allow {
-		return RetrogradeResponse{}, deniedErr(ctx, "Retrograde", req.Principal.URI, decision)
+		return RetrogradeResponse{}, ErrDenied
 	}
 
 	lki, err := s.schedule.ResolveLease(ctx, info, req.AttributeSet)

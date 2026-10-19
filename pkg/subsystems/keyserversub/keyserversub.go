@@ -20,6 +20,7 @@ import (
 	"github.com/messier-42/khaled/pkg/keyschedule"
 	"github.com/messier-42/khaled/pkg/keyserver"
 	"github.com/messier-42/khaled/pkg/lifecycle"
+	klog "github.com/messier-42/khaled/pkg/log"
 	"github.com/messier-42/khaled/pkg/plugin"
 	"github.com/messier-42/khaled/pkg/plugin/keystorage"
 	"github.com/messier-42/khaled/pkg/wrapper/macwrapper"
@@ -135,6 +136,10 @@ func spec(policy keyserver.PolicySource) lifecycle.Spec[*Stack] {
 	return lifecycle.Spec[*Stack]{
 		Name: "keyserver",
 		Apply: func(ctx context.Context, old *Stack, oldSnap, newSnap config.Snapshot) (*Stack, error) {
+			auditCfg, err := klog.AuditConfigFromSnapshot(newSnap)
+			if err != nil {
+				return nil, err
+			}
 			newArgs, err := argsFromSnapshot(newSnap)
 			if err != nil {
 				return nil, err
@@ -147,6 +152,7 @@ func spec(policy keyserver.PolicySource) lifecycle.Spec[*Stack] {
 							return nil, err
 						}
 					}
+					old.server.SetAuditConfig(auditCfg)
 					return old, nil
 				}
 			}
@@ -158,6 +164,7 @@ func spec(policy keyserver.PolicySource) lifecycle.Spec[*Stack] {
 				_ = next.Close()
 				return nil, err
 			}
+			next.server.SetAuditConfig(auditCfg)
 			return next, nil
 		},
 		Close: func(s *Stack) error { return s.Close() },

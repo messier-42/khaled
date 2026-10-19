@@ -63,8 +63,14 @@ func TestAuditValueNestedSecrets(t *testing.T) {
 			t.Errorf("%s: %v", name, got)
 		}
 	}
-	got := AuditValue("metadata", []any{map[string]any{"password": "secret", auditTestClaim: "blue"}, []byte("secret"), cyclic}).([]any)
-	if got[0].(map[string]any)["password"] != auditRedacted || got[0].(map[string]any)[auditTestClaim] != "blue" || got[1] != auditRedacted {
+	got := AuditValue("metadata", []any{map[string]any{"password": "secret", auditTestClaim: "blue"}, []byte("secret"), secretMarshaler{}, cyclic}).([]any)
+	want := []any{map[string]any{"password": auditRedacted, auditTestClaim: "blue"}, auditRedacted, auditRedacted}
+	if !reflect.DeepEqual(got[:3], want) {
 		t.Fatal(got)
 	}
 }
+
+// A metadata value must not invoke custom JSON conversion during auditing.
+type secretMarshaler struct{}
+
+func (secretMarshaler) MarshalJSON() ([]byte, error) { return []byte(`"marshaler-secret"`), nil }

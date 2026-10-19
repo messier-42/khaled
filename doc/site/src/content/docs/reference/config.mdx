@@ -229,13 +229,8 @@ logging:
   # Built-in default: "error". Select "info" to collect key-access audits.
   severity: "info"
 
-  # Optional. Audit detail. All fields below show their defaults.
-  audit:
-    principalClaims: []
-    clientIP: false
-    fullAttributeSet: false
-    policyHashes: false
-    diagnostics: false
+  # Optional. Audit detail; see "Audit detail" below for its schema.
+  audit: {}
 
 # Required. Listener configuration. It is mandatory to specify at least
 # one listener.
@@ -323,63 +318,29 @@ Keys are retained in the existing SQLite key store, not in configuration files.
 | `peers[].url` | HTTPS CKAP base URL for public discovery, mutually exclusive with `identity`. |
 | `peers[].caFile` | Optional PEM CA file for discovery TLS; requires `url`. |
 
-
-
 ## Audit detail
 
-`logging.audit` is an optional object. Unknown properties in this object are
-rejected. Its fields configure additional data in the INFO `key_access`
-events described in [Audit Logging](/reference/audit-logging/).
+`logging.audit` is an optional object. All properties are optional; unknown
+properties and invalid types are rejected.
 
-| Property | Type | Default | Effect |
-| --- | --- | --- | --- |
-| `principalClaims` | Array of nonempty strings | `[]` | Allowlist of principal claim names to record. No wildcard expansion. Missing claims are omitted. |
-| `clientIP` | Boolean | `false` | Record the transport peer IP when available. Does not trust forwarded headers. |
-| `fullAttributeSet` | Boolean | `false` | Record the Attribute Set object, subject to redaction, in addition to its digest. |
-| `policyHashes` | Boolean | `false` | Record SHA-256 hashes of determining policy identifiers, not policy text. |
-| `diagnostics` | Boolean | `false` | Record diagnostic counts and hashes, and a hash of the nonempty decision reason. No raw diagnostic or error text. |
+| Property | Type | Default |
+| --- | --- | --- |
+| `principalClaims` | Array of nonempty strings (exact claim names) | `[]` |
+| `clientIP` | Boolean | `false` |
+| `fullAttributeSet` | Boolean | `false` |
+| `policyHashes` | Boolean | `false` |
+| `diagnostics` | Boolean | `false` |
 
-The zero/default detail configuration still records operation, outcome, policy
-verdict, principal identity, correlation context, Attribute Set digest, event
-timestamp, and lease expiry when applicable. Audit events use the existing
-logger; there is no separate format, severity, or output destination. The
-built-in logging defaults are `format: json` and `severity: error`, which
-suppresses INFO audit records. CLI/environment defaults can override those
-built-ins; explicit `logging.format` and `logging.severity` take precedence.
-
-For audit collection with default detail, add this block to a valid server
-configuration:
+Minimal logging block for audit collection with default detail, to add to an
+otherwise valid server configuration:
 
 ```yaml
 logging:
   format: json
   severity: info
-  audit:
-    principalClaims: []
-    clientIP: false
-    fullAttributeSet: false
-    policyHashes: false
-    diagnostics: false
 ```
 
-To include selected claims and the peer IP and correlate determining policies:
-
-```yaml
-logging:
-  format: json
-  severity: info
-  audit:
-    principalClaims: [team, region]
-    clientIP: true
-    policyHashes: true
-    fullAttributeSet: false
-    diagnostics: false
-```
-
-To additionally record the Attribute Set and diagnostic hashes, set
-`fullAttributeSet: true` and `diagnostics: true` in the same block. These
-options do not authorize logging cryptographic material, credentials, or
-authentication tokens. See [sensitive-field handling](/reference/audit-logging/#detail-configuration)
-for the exact redactions and metadata requirements. Audit detail changes apply
-on config reload without reopening key storage. They do not change policy
-or authorization behavior.
+Omitting `audit` or using `audit: {}` selects the defaults above. The built-in
+logger defaults are `format: json` and `severity: error`; select
+`severity: info` to collect audit events. See [Audit Logging](/reference/audit-logging/) for field
+meanings, optional detail, redaction, reload behavior, and collection examples.

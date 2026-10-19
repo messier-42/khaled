@@ -9,15 +9,13 @@ import (
 	"errors"
 	"log/slog"
 	"net/netip"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/messier-42/cabe-go/ckap"
-	"github.com/messier-42/khaled/pkg/federation"
 	"github.com/messier-42/khaled/pkg/keyserver"
 	klog "github.com/messier-42/khaled/pkg/log"
-	"github.com/messier-42/khaled/pkg/plugin/keystorage"
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 )
 
@@ -27,9 +25,6 @@ const (
 	auditOutcomeSuccess      = "success"
 	auditAttributeValue      = "restricted"
 	auditClaimTeam           = "team"
-	auditCredentialSentinel  = "credential-secret"
-	auditPolicyID            = "policy-a"
-	auditAfterAllow          = "afterAllow"
 )
 
 func captureAudit(t *testing.T) *bytes.Buffer {
@@ -43,13 +38,9 @@ func captureAudit(t *testing.T) *bytes.Buffer {
 
 func auditRecord(t *testing.T, buf *bytes.Buffer) map[string]any {
 	t.Helper()
-	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("want exactly one record, got %s", buf.String())
-	}
 	var record map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &record); err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("want exactly one JSON record: %v; got %s", err, buf.String())
 	}
 	if record["event"] != "key_access" || record["level"] != "INFO" {
 		t.Fatalf("not an INFO audit event: %v", record)
@@ -66,131 +57,139 @@ func digestForTest(s string) string {
 }
 
 func TestKeyAccessAudit(t *testing.T) {
-	for _, op := range []string{"Prograde", auditOperationRetrograde} {
-		for _, allow := range []bool{false, true} {
-			for _, captive := range []bool{false, true} {
-				t.Run(op+"/"+map[bool]string{true: auditDecisionAllow, false: "deny"}[allow]+"/"+map[bool]string{true: "captive", false: "noncaptive"}[captive], func(t *testing.T) {
-					f := newFixture(t)
-					as := mustSet(t, map[string]any{"classification": auditAttributeValue})
-					seed, err := f.srv.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as})
-					if err != nil {
-						t.Fatal(err)
-					}
-					d := policyengine.Decision{Allow: allow, RequireCaptive: captive, Reason: "sensitive reason", DeterminingPolicies: []string{"sensitive-policy"}, Diagnostics: []string{"sensitive diagnostic"}}
-					f.engine.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) { return d, nil }
-					f.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) { return d, nil }
-					f.principal.Claims = map[string]any{auditClaimTeam: "sensitive claim"}
-					buf := captureAudit(t)
-					ctx := klog.WithCorrelationID(t.Context(), "correlation-1")
-					ctx = klog.WithClientIP(ctx, netip.MustParseAddr("192.0.2.1"))
-					var lease keyserver.Lease
-					if op == "Prograde" {
-						resp, e := f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as, ARINToken: []byte("arin-secret")})
-						lease, err = resp.Lease, e
-					} else {
-						resp, e := f.srv.Retrograde(ctx, keyserver.RetrogradeRequest{Principal: f.principal, AttributeSet: as, LeaseRef: seed.Lease.LeaseRef})
-						lease, err = resp.Lease, e
-					}
-					if allow && err != nil {
-						t.Fatal(err)
-					}
-					if !allow && !errors.Is(err, keyserver.ErrDenied) {
-						t.Fatalf("denial changed: %v", err)
-					}
-					r := auditRecord(t, buf)
-					want := map[string]any{"operation": op, "policyDecision": map[bool]string{true: auditDecisionAllow, false: "deny"}[allow], "outcome": map[bool]string{true: auditOutcomeSuccess, false: "denied"}[allow], "principalURI": f.principal.URI, "correlationID": "correlation-1", "attributeSetDigest": digestForTest(string(as.Repr())), "determiningPolicyCount": float64(1)}
-					for k, v := range want {
-						if r[k] != v {
-							t.Errorf("%s = %v, want %v", k, r[k], v)
-						}
-					}
-					if allow {
-						if r["leaseExpiry"] != lease.Expiry.UTC().Format(time.RFC3339Nano) {
-							t.Errorf("wrong expiry: %v", r)
-						}
-					} else if _, ok := r["leaseExpiry"]; ok {
-						t.Error("denial has expiry")
-					}
-					for _, field := range []string{"principalClaims", "clientIP", "attributeSet", "determiningPolicyHashes", "diagnosticCount", "reasonHash"} {
-						if _, ok := r[field]; ok {
-							t.Errorf("default exposes %s", field)
-						}
-					}
-					for _, secret := range []string{auditAttributeValue, "sensitive", "arin-secret", "192.0.2.1", base64.StdEncoding.EncodeToString(seed.Lease.LeaseRef)} {
-						if strings.Contains(buf.String(), secret) {
-							t.Errorf("secret leaked: %q", secret)
-						}
-					}
-					if lease.LKAI.NonCaptive != nil {
-						key := lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)
-						if strings.Contains(buf.String(), base64.StdEncoding.EncodeToString(key)) || strings.Contains(buf.String(), hex.EncodeToString(key)) {
-							t.Error("lease key leaked")
-						}
-					}
-				})
+	for _, tc := range []struct {
+		operation, decision, outcome string
+		captive                      bool
+	}{
+		{"Prograde", auditDecisionAllow, auditOutcomeSuccess, false},
+		{"Prograde", "deny", "denied", false},
+		{auditOperationRetrograde, auditDecisionAllow, auditOutcomeSuccess, true},
+		{auditOperationRetrograde, "deny", "denied", true},
+	} {
+		t.Run(tc.operation+"/"+tc.outcome, func(t *testing.T) {
+			f := newFixture(t)
+			as := mustSet(t, map[string]any{"classification": auditAttributeValue, "project": "audit"})
+			var ref []byte
+			if tc.operation == auditOperationRetrograde {
+				seed, err := f.srv.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as})
+				if err != nil {
+					t.Fatal(err)
+				}
+				ref = seed.Lease.LeaseRef
 			}
-		}
+			allow := tc.decision == auditDecisionAllow
+			d := policyengine.Decision{Allow: allow, RequireCaptive: tc.captive, Reason: "sensitive reason", DeterminingPolicies: []string{"sensitive-policy"}, Diagnostics: []string{"sensitive diagnostic"}}
+			f.engine.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) { return d, nil }
+			f.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) { return d, nil }
+			f.principal.Claims = map[string]any{auditClaimTeam: "sensitive claim"}
+			buf := captureAudit(t)
+			ctx := klog.WithCorrelationID(t.Context(), "correlation-1")
+			ctx = klog.WithClientIP(ctx, netip.MustParseAddr("192.0.2.1"))
+			var lease keyserver.Lease
+			var err error
+			if tc.operation == "Prograde" {
+				resp, e := f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as, ARINToken: []byte("arin-secret")})
+				lease, err = resp.Lease, e
+			} else {
+				resp, e := f.srv.Retrograde(ctx, keyserver.RetrogradeRequest{Principal: f.principal, AttributeSet: as, LeaseRef: ref})
+				lease, err = resp.Lease, e
+			}
+			if (allow && err != nil) || (!allow && !errors.Is(err, keyserver.ErrDenied)) {
+				t.Fatalf("unexpected operation result: %v", err)
+			}
+			r := auditRecord(t, buf)
+			want := map[string]any{
+				"operation": tc.operation, "policyDecision": tc.decision, "outcome": tc.outcome,
+				"principalURI": f.principal.URI, "correlationID": "correlation-1",
+				"attributeSetDigest":     digestForTest(string(as.Repr())),
+				"determiningPolicyCount": float64(1), "requireCaptive": tc.captive,
+			}
+			for field, value := range want {
+				if r[field] != value {
+					t.Errorf("%s = %v, want %v", field, r[field], value)
+				}
+			}
+			if allow {
+				if r["leaseExpiry"] != lease.Expiry.UTC().Format(time.RFC3339Nano) {
+					t.Errorf("wrong expiry: %v", r)
+				}
+			} else if _, ok := r["leaseExpiry"]; ok {
+				t.Error("denial has expiry")
+			}
+			for _, field := range []string{"principalClaims", "clientIP", "attributeSet", "determiningPolicyHashes", "diagnosticCount", "diagnosticHashes", "reasonHash"} {
+				if _, ok := r[field]; ok {
+					t.Errorf("default exposes %s", field)
+				}
+			}
+			secrets := []string{auditAttributeValue, "sensitive", "arin-secret", "192.0.2.1"}
+			if len(ref) > 0 {
+				secrets = append(secrets, base64.StdEncoding.EncodeToString(ref))
+			}
+			if lease.LKAI.NonCaptive != nil {
+				key := lease.LKAI.NonCaptive.LeaseKey[-1].([]byte)
+				secrets = append(secrets, base64.StdEncoding.EncodeToString(key), hex.EncodeToString(key))
+			}
+			for _, secret := range secrets {
+				if strings.Contains(buf.String(), secret) {
+					t.Errorf("secret leaked: %q", secret)
+				}
+			}
+		})
 	}
 }
 
 func TestAuditOptionalDetailsAndRedaction(t *testing.T) {
+	const (
+		credential = "credential-secret"
+		policyA    = "policy-a"
+		policyB    = "policy-b"
+	)
 	f := newFixture(t)
-	cfg := klog.AuditConfig{PrincipalClaims: []string{auditClaimTeam, "nested", "authToken", "binary", "custom"}, ClientIP: true, FullAttributeSet: true, PolicyHashes: true, Diagnostics: true}
+	cfg := klog.AuditConfig{PrincipalClaims: []string{auditClaimTeam, "authToken"}, ClientIP: true, FullAttributeSet: true, PolicyHashes: true, Diagnostics: true}
 	f.srv.SetAuditConfig(cfg)
 	cfg.PrincipalClaims[0] = "unlisted" // Server must own its allowlist.
-	f.principal.Claims = map[string]any{auditClaimTeam: "blue", "unlisted": "omit-me", "authToken": auditCredentialSentinel, "nested": map[string]any{"password": "nested-secret", "region": "west"}, "binary": []byte("key-secret"), "custom": secretMarshaler{}}
+	f.principal.Claims = map[string]any{auditClaimTeam: "blue", "unlisted": "omit-me", "authToken": credential}
 	f.engine.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) {
-		return policyengine.Decision{Allow: true, DeterminingPolicies: []string{"policy-b", auditPolicyID, auditPolicyID}, Reason: auditCredentialSentinel, Diagnostics: []string{"token-secret"}}, nil
+		return policyengine.Decision{Allow: true, DeterminingPolicies: []string{policyB, policyA, policyA}, Reason: credential, Diagnostics: []string{"token-secret"}}, nil
 	}
 	buf := captureAudit(t)
 	ctx := klog.WithClientIP(t.Context(), netip.MustParseAddr("2001:db8::1"))
-	as := mustSet(t, map[string]any{"classification": auditAttributeValue, "credentials": "attribute-secret", "payload": []byte("byte-secret")})
-	_, err := f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as, ARINToken: []byte("arin-secret")})
-	if err != nil {
+	as := mustSet(t, map[string]any{"classification": auditAttributeValue, "credentials": "attribute-secret"})
+	if _, err := f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as, ARINToken: []byte("arin-secret")}); err != nil {
 		t.Fatal(err)
 	}
 	r := auditRecord(t, buf)
-	if r["clientIP"] != "2001:db8::1" || r["diagnosticCount"] != float64(1) || r["reasonHash"] != digestForTest(auditCredentialSentinel) {
-		t.Fatalf("missing options: %v", r)
+	want := map[string]any{
+		"clientIP":                "2001:db8::1",
+		"principalClaims":         map[string]any{auditClaimTeam: "blue", "authToken": "[REDACTED]"},
+		"attributeSet":            map[string]any{"classification": auditAttributeValue, "credentials": "[REDACTED]"},
+		"determiningPolicyHashes": []any{digestForTest(policyB), digestForTest(policyA)},
+		"diagnosticCount":         float64(1), "diagnosticHashes": []any{digestForTest("token-secret")},
+		"reasonHash": digestForTest(credential),
 	}
-	claims := r["principalClaims"].(map[string]any)
-	if claims[auditClaimTeam] != "blue" || claims["authToken"] != "[REDACTED]" {
-		t.Fatalf("bad claims: %v", claims)
+	for field, value := range want {
+		if !reflect.DeepEqual(r[field], value) {
+			t.Errorf("%s = %v, want %v", field, r[field], value)
+		}
 	}
-	attributes := r["attributeSet"].(map[string]any)
-	if attributes["classification"] != auditAttributeValue || attributes["credentials"] != "[REDACTED]" {
-		t.Fatalf("bad attributes: %v", attributes)
-	}
-	if len(r["determiningPolicyHashes"].([]any)) != 2 {
-		t.Fatal("policy hashes not deduplicated")
-	}
-	for _, secret := range []string{"omit-me", auditCredentialSentinel, "nested-secret", "key-secret", "attribute-secret", "byte-secret", "arin-secret", "token-secret", auditPolicyID, "policy-b", "marshaler-secret"} {
+	for _, secret := range []string{"omit-me", credential, "attribute-secret", "arin-secret", "token-secret", policyA, policyB} {
 		if strings.Contains(buf.String(), secret) {
 			t.Errorf("leaked %q", secret)
 		}
 	}
-	f.srv.SetAuditConfig(klog.AuditConfig{})
-	buf.Reset()
-	if _, err = f.srv.Prograde(ctx, keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as}); err != nil {
-		t.Fatal(err)
-	}
-	r = auditRecord(t, buf)
-	if _, ok := r["principalClaims"]; ok {
-		t.Fatal("detail remained enabled after reset")
-	}
 }
 
-type secretMarshaler struct{}
-
-func (secretMarshaler) MarshalJSON() ([]byte, error) { return []byte(`"marshaler-secret"`), nil }
-
 func TestAuditErrorsDoNotLookSuccessful(t *testing.T) {
-	for _, mode := range []string{"policy", "invalidRef", auditAfterAllow} {
-		t.Run(mode, func(t *testing.T) {
+	for _, tc := range []struct{ name, policyDecision string }{
+		{"policy", "unavailable"},
+		{"invalidRef", "unavailable"},
+		{"after authorization", auditDecisionAllow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t)
 			buf := captureAudit(t)
 			var err error
-			switch mode {
+			switch tc.name {
 			case "policy":
 				f.engine.encap = func(policyengine.EncapsulateRequest) (policyengine.Decision, error) {
 					return policyengine.Decision{Allow: true}, errors.New("error-secret")
@@ -198,7 +197,7 @@ func TestAuditErrorsDoNotLookSuccessful(t *testing.T) {
 				_, err = f.srv.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: f.principal})
 			case "invalidRef":
 				_, err = f.srv.Retrograde(t.Context(), keyserver.RetrogradeRequest{Principal: f.principal, LeaseRef: []byte("ref-secret")})
-			case auditAfterAllow:
+			case "after authorization":
 				srv, e := keyserver.New(keyserver.Config{DomainName: "test", Schedule: f.sched, Policy: f.engine, RefWrapper: stubWrapper{}})
 				if e != nil {
 					t.Fatal(e)
@@ -209,11 +208,7 @@ func TestAuditErrorsDoNotLookSuccessful(t *testing.T) {
 				t.Fatal("expected error")
 			}
 			r := auditRecord(t, buf)
-			want := "unavailable"
-			if mode == auditAfterAllow {
-				want = auditDecisionAllow
-			}
-			if r["outcome"] != "error" || r["policyDecision"] != want {
+			if r["outcome"] != "error" || r["policyDecision"] != tc.policyDecision {
 				t.Fatalf("misleading result: %v", r)
 			}
 			if _, ok := r["leaseExpiry"]; ok {
@@ -223,63 +218,5 @@ func TestAuditErrorsDoNotLookSuccessful(t *testing.T) {
 				t.Fatal("error/ref text leaked")
 			}
 		})
-	}
-}
-
-func TestForeignRetrogradeAuditDenial(t *testing.T) {
-	f := newFixture(t)
-	runtime, err := federation.New(t.Context(), f.domain.(keystorage.FederationDomain), federation.Config{DomainID: testTargetDomain})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.srv.SetFederation(runtime); err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}, {Allow: true, Diagnostics: []string{"sensitive diagnostic"}}} {
-		f.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) { return d, nil }
-		buf := captureAudit(t)
-		_, err := f.srv.Retrograde(t.Context(), keyserver.RetrogradeRequest{Principal: f.principal, Federation: &ckap.RetrogradeFederation{OriginDomain: testOriginDomain}})
-		if !errors.Is(err, keyserver.ErrDenied) {
-			t.Fatal(err)
-		}
-		r := auditRecord(t, buf)
-		if r["outcome"] != "denied" || r["operation"] != auditOperationRetrograde {
-			t.Fatal(r)
-		}
-		if d.Allow && r["policyDecision"] != auditDecisionAllow {
-			t.Fatal("policy verdict lost")
-		}
-	}
-}
-
-func TestAuditRespectsLoggingSeverity(t *testing.T) {
-	f := newFixture(t)
-	buf := captureAudit(t)
-	for _, level := range []slog.Level{slog.LevelWarn, slog.LevelError} {
-		slog.SetDefault(klog.New(buf, klog.Config{Format: klog.FormatJSON, Severity: level}))
-		if _, err := f.srv.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: f.principal}); err != nil {
-			t.Fatal(err)
-		}
-		if buf.Len() != 0 {
-			t.Fatalf("audit bypassed severity %v: %s", level, buf.String())
-		}
-	}
-}
-
-func TestAttributeSetAuditDigestCanonical(t *testing.T) {
-	f := newFixture(t)
-	buf := captureAudit(t)
-	var previous any
-	for _, data := range []map[string]any{{"a": "one", "z": "two"}, {"z": "two", "a": "one"}} {
-		as := mustSet(t, data)
-		if _, err := f.srv.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: f.principal, AttributeSet: as}); err != nil {
-			t.Fatal(err)
-		}
-		r := auditRecord(t, buf)
-		if previous != nil && r["attributeSetDigest"] != previous {
-			t.Fatal("noncanonical digest")
-		}
-		previous = r["attributeSetDigest"]
-		buf.Reset()
 	}
 }

@@ -95,10 +95,22 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 	if auditRecord(t, auditBuf)["outcome"] != auditOutcomeSuccess {
 		t.Fatal("cached foreign access missing audit")
 	}
-	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}} {
+	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}, {Allow: true, Diagnostics: []string{"sensitive diagnostic"}}} {
+		auditBuf.Reset()
 		target.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) { return d, nil }
 		if _, e = target.srv.Retrograde(t.Context(), req); !errors.Is(e, keyserver.ErrDenied) {
 			t.Fatalf("policy bypass: %v", e)
+		}
+		audit = auditRecord(t, auditBuf)
+		verdict := "deny"
+		if d.Allow {
+			verdict = auditDecisionAllow
+		}
+		if audit["policyDecision"] != verdict || audit["outcome"] != "denied" || audit["operation"] != auditOperationRetrograde {
+			t.Fatalf("misleading federated denial: %v", audit)
+		}
+		if _, ok := audit["leaseExpiry"]; ok {
+			t.Fatal("denied foreign access has expiry")
 		}
 	}
 	target.engine.decap = nil

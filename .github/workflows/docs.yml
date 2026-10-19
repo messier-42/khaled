@@ -3,6 +3,10 @@ name: Deploy Docs to GitHub Pages
 on:
   push:
     branches: [master]
+  pull_request:
+    paths:
+      - "doc/site/**"
+      - ".github/workflows/docs.yml"
 
 permissions:
   contents: read
@@ -10,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,6 +30,7 @@ jobs:
           path: doc/site
 
   deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: build
     runs-on: ubuntu-latest
     environment:

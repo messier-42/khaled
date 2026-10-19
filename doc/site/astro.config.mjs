@@ -51,9 +51,11 @@ export default defineConfig({
       components: {
         SocialIcons: './src/components/ProjectLinks.astro',
         Footer: './src/components/DocsFooter.astro',
+        ThemeProvider: './src/components/ThemeProvider.astro',
+        ThemeSelect: './src/components/ThemeSelect.astro',
       },
       expressiveCode: {
-        themes: ['github-dark', 'github-light'],
+        themes: ['github-light'],
       },
       social: [{icon: 'github', label: 'Khaled on GitHub', href: 'https://github.com/messier-42/khaled'}],
       logo: {

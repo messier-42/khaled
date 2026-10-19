@@ -1,0 +1,147 @@
+---
+title: Audit Logging
+description: Structured records of CKAP key-access decisions.
+sidebar:
+  order: 20
+---
+
+## Scope
+
+khaled emits one INFO record with `event: "key_access"` when a **Prograde** or
+**Retrograde** key-server call returns. This includes successful and denied
+local and federated Retrograde requests, and errors encountered during either
+operation. Prograde records describe its key-access decision; they do not list
+individual federation release-policy evaluations.
+
+These records describe the Key Service's decisions and response construction.
+A successful record does not prove receipt by the client, encryption,
+decryption, or subsequent information sharing. Malformed requests and
+requests rejected by authentication or claims mapping before reaching the key
+server do not produce these events. GetSelf, assisted operations, federation
+identity requests, and administrative operations are outside this audit scope.
+
+## Collection
+
+Use the existing logger with JSON output and INFO severity:
+
+```yaml
+logging:
+  format: json
+  severity: info
+```
+
+No DEBUG logging is required. JSON is the recommended format for audit
+collection. The daemon writes to **stderr**; configure the existing service,
+container, or log-agent infrastructure to collect that stream, parse each JSON
+record, and forward records whose `event` equals `key_access` to the operator's
+SIEM. For example, this filter selects records from a captured JSON log:
+
+```sh
+jq -c 'select(.event == "key_access")' khaled.jsonl
+```
+
+Diagnostic records share the stream but do not carry this event marker. Filter
+on `event`, rather than message text or severity alone. Existing HTTP request
+logs are DEBUG diagnostics; they are not additional key-access audit events.
+There is no dedicated audit sink, native SIEM integration, delivery guarantee,
+or persistent audit queue. Normal logger filtering applies: `warn` and `error`
+suppress these INFO records. The built-in logger defaults are **JSON and ERROR**,
+so operators must select INFO (or DEBUG) to collect audit events. Config-source
+values take precedence over the CLI/environment logging defaults.
+
+## Fields
+
+| Field | Meaning and presence |
+| --- | --- |
+| `time`, `level`, `msg` | Standard slog fields: event emission timestamp in RFC 3339 format, `INFO`, and `key-access decision`. |
+| `event` | Always `key_access`; the collection marker. |
+| `operation` | `Prograde` or `Retrograde`. |
+| `outcome` | `success`: the key-server call constructed a lease response; `denied`: it returned the existing access-denied error; `error`: another failure prevented completion. |
+| `policyDecision` | `allow` or `deny` when the primary policy evaluation returned a decision; `unavailable` when it did not complete. An allowed decision can still have an `error` outcome. Federated Retrograde can have `allow` with `denied` when its existing captive/diagnostic checks reject access. |
+| `principalURI` | Principal identifier supplied by authentication and claims mapping; omitted if empty. |
+| `domainName` | Configured local CABE domain name. |
+| `correlationID` | Server-generated request UUID from the HTTP logging middleware; absent for callers without that context. |
+| `requestID` | Optional client-supplied `X-Request-ID`, accepted by HTTP middleware only when it parses as a UUID. |
+| `attributeSetDigest` | `sha256:` followed by lowercase hex SHA-256 of the canonical Attribute Set representation bytes, including for denied requests. |
+| `determiningPolicyCount` | Number of determining policy IDs reported by the engine; present only when a decision is available. Zero means none were reported. |
+| `requireCaptive` | Captive requirement reported by the primary policy decision; present only with a decision. This is not the final lease's captive status. |
+| `leaseExpiry` | Expiry of the constructed lease in UTC; present only on success. |
+| `principalClaims` | Configured, present claim names and their values; emitted only with a nonempty claims allowlist. |
+| `clientIP` | Transport-observed peer IP, without its port; emitted only when enabled and available. Forwarded headers are ignored. Behind a proxy, this is the proxy's address. |
+| `attributeSet` | Attribute Set as a JSON object, with the redactions below; emitted only when enabled. The digest remains present. |
+| `determiningPolicyHashes` | Sorted, deduplicated SHA-256 digests of determining **policy identifier strings**, not policy source text; emitted only when enabled and a decision is available. May be empty. |
+| `diagnosticCount`, `diagnosticHashes` | Number of engine diagnostic strings and their sorted, deduplicated SHA-256 digests; emitted only when diagnostics are enabled and a decision is available. |
+| `reasonHash` | SHA-256 digest of the engine's nonempty reason string; emitted only when diagnostics are enabled. |
+
+All digest fields use the `sha256:` prefix. Policy and diagnostic hashes permit
+correlation without copying engine-generated text into the audit stream. Raw
+policy IDs, reasons, diagnostics, and error messages are not audit fields.
+
+## Detail configuration
+
+All optional details are disabled by default. See the
+[Configuration Reference](/reference/config/#audit-detail) for the schema and
+YAML examples. Changes apply to subsequent calls through normal config reload;
+in-flight calls retain the detail settings captured at entry. These controls
+affect audit fields only; existing DEBUG HTTP diagnostics include `remoteAddr`
+independently of the audit `clientIP` option.
+
+`principalClaims` is an explicit allowlist of claim names. Unlisted and missing
+claims are omitted. Optional claims and Attribute Set objects redact fields
+whose names contain `token`, `password`, `credential`, `secret`, `privatekey`,
+`leasekey`, `plaintext`, `authorization`, `cookie`, or `lkat`, or equal `key` or
+`cek`, ignoring case and the separators `.`, `_`, and `-`. Byte strings,
+unsupported Go values, and nesting beyond 16 levels are also replaced with
+`[REDACTED]`. Custom string, log, and JSON conversion methods are not invoked.
+
+The audit code never serializes requests, leases, cryptographic keys, CEKs,
+LeaseRefs, LKATs, ARIN tokens, authentication headers, or credentials. The
+optional metadata controls do not enable those protocol fields. Only enable
+claim names and Attribute Set values known to be suitable for logging: name
+redaction cannot recognize secrets placed under unrelated application field
+names. Digests allow correlation and are not a confidentiality guarantee for
+predictable Attribute Sets or identifiers.
+
+## Examples
+
+A successful Prograde request with default audit detail (JSON/INFO configured):
+
+```json
+{
+  "time": "2026-10-19T18:00:00Z",
+  "level": "INFO",
+  "msg": "key-access decision",
+  "event": "key_access",
+  "operation": "Prograde",
+  "outcome": "success",
+  "domainName": "default",
+  "attributeSetDigest": "sha256:c19a797fa1fd590cd2e5b42d1cf5f246e29b91684e2f87404b81dc345c7a56a0",
+  "principalURI": "spiffe://example.org/workload/a",
+  "determiningPolicyCount": 1,
+  "requireCaptive": false,
+  "policyDecision": "allow",
+  "leaseExpiry": "2026-10-19T18:05:00Z",
+  "correlationID": "042112e7-423b-478d-a257-260b828db2cb"
+}
+```
+
+A denied Retrograde request for the same Attribute Set. No lease expiry is
+recorded:
+
+```json
+{
+  "time": "2026-10-19T18:01:00Z",
+  "level": "INFO",
+  "msg": "key-access decision",
+  "event": "key_access",
+  "operation": "Retrograde",
+  "outcome": "denied",
+  "domainName": "default",
+  "attributeSetDigest": "sha256:c19a797fa1fd590cd2e5b42d1cf5f246e29b91684e2f87404b81dc345c7a56a0",
+  "principalURI": "spiffe://example.org/workload/b",
+  "determiningPolicyCount": 0,
+  "requireCaptive": false,
+  "policyDecision": "deny",
+  "correlationID": "a54a1700-17ad-4be7-8af3-b7b07ad4a0a4"
+}
+```

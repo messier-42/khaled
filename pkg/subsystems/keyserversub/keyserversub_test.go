@@ -1,12 +1,16 @@
 package keyserversub
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/messier-42/cabe-go/attrset"
 	"github.com/messier-42/khaled/pkg/config"
 	"github.com/messier-42/khaled/pkg/keyserver"
+	klog "github.com/messier-42/khaled/pkg/log"
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 )
 
@@ -113,5 +117,46 @@ func TestStart_RejectsUnknownPlugin(t *testing.T) {
 	}}
 	if _, err := New(context.Background(), snap, stubPolicyEngine{}); err == nil {
 		t.Fatal("Start accepted unknown plugin")
+	}
+}
+
+// Audit reload must neither reopen the locked store nor alter authorization.
+func TestAuditDetailReload(t *testing.T) {
+	dir := t.TempDir()
+	snap := snapshotForKeyStorage(dir)
+	mgr, err := New(t.Context(), snap, stubPolicyEngine{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = mgr.Stop() })
+	original := mgr.Current().Server()
+	var buf bytes.Buffer
+	logger := slog.Default()
+	slog.SetDefault(klog.New(&buf, klog.Config{Format: klog.FormatJSON, Severity: slog.LevelInfo}))
+	t.Cleanup(func() { slog.SetDefault(logger) })
+	for _, enabled := range []bool{true, false} {
+		next := snapshotForKeyStorage(dir)
+		next.Root["logging"] = config.Map{"audit": config.Map{"fullAttributeSet": enabled}}
+		if err := mgr.Reconcile(t.Context(), next); err != nil {
+			t.Fatal(err)
+		}
+		if mgr.Current().Server() != original {
+			t.Fatal("audit reload rebuilt key storage")
+		}
+		buf.Reset()
+		as, err := attrset.New(map[string]any{"team": "blue"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := original.Prograde(t.Context(), keyserver.ProgradeRequest{Principal: policyengine.Principal{URI: "spiffe://test/alice"}, AttributeSet: as}); err != nil {
+			t.Fatal(err)
+		}
+		var record map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+			t.Fatal(err)
+		}
+		if _, present := record["attributeSet"]; present != enabled {
+			t.Fatalf("detail enabled=%v: %v", enabled, record)
+		}
 	}
 }

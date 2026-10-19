@@ -36,6 +36,7 @@ import (
 	"github.com/messier-42/cabe-go/attrset"
 	"github.com/messier-42/cabe-go/ckapraw"
 	"github.com/messier-42/khaled/pkg/keyschedule"
+	klog "github.com/messier-42/khaled/pkg/log"
 	"github.com/messier-42/khaled/pkg/plugin/policyengine"
 	"github.com/messier-42/khaled/pkg/refwrapper"
 	"github.com/messier-42/khaled/pkg/wrapper"
@@ -61,6 +62,9 @@ type PolicySource interface {
 
 // Config configures a Server.
 type Config struct {
+	// Audit selects optional key-access audit details.
+	Audit klog.AuditConfig
+
 	// DomainName is the name of the CABE domain this Server serves.
 	// Echoed back in GetSelf responses. Required.
 	DomainName string
@@ -94,6 +98,8 @@ const defaultLeaseDuration = 5 * time.Minute
 
 // Server is the per-domain CKAP orchestrator.
 type Server struct {
+	audit atomic.Pointer[klog.AuditConfig]
+
 	federationDomainID atomic.Pointer[string]
 	federation         atomic.Pointer[federation.Runtime]
 	domainName         string
@@ -138,7 +144,7 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	srv := &Server{
 		domainName:    cfg.DomainName,
 		schedule:      cfg.Schedule,
 		policy:        cfg.Policy,
@@ -146,7 +152,9 @@ func New(cfg Config) (*Server, error) {
 		leaseDuration: leaseDur,
 		now:           now,
 		version:       version,
-	}, nil
+	}
+	srv.SetAuditConfig(cfg.Audit)
+	return srv, nil
 }
 
 // Request and response types. Transport layers translate to/from
@@ -233,7 +241,9 @@ type LKAICaptive struct {
 	LKAT []byte
 }
 
-// deniedErr logs the Decision's server-side diagnostic fields
+// deniedErr retains diagnostic logging for assisted operations. Prograde and
+// Retrograde use auditAccess instead to avoid duplicate decision records.
+// It logs the Decision's server-side diagnostic fields
 // (Reason, DeterminingPolicies, Diagnostics) and returns bare
 // ErrDenied. Details about the decision are intentionally not
 // included in the returned error in case it gets sent on the wire.

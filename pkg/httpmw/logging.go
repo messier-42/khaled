@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"runtime/debug"
 	"time"
 
@@ -53,6 +54,9 @@ func Logging(next http.Handler) http.Handler {
 
 		correlationID := uuid.NewString()
 		ctx := klog.WithCorrelationID(r.Context(), correlationID)
+		if peer, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+			ctx = klog.WithClientIP(ctx, peer.Addr())
+		}
 
 		var requestID string
 		if raw := r.Header.Get("X-Request-ID"); raw != "" {

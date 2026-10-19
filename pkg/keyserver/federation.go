@@ -101,13 +101,14 @@ func (s *Server) federate(ctx context.Context, pol policyengine.Engine, req Prog
 	lease.Federation.FLPs = cabe.FLPSet{pkg}
 	return nil
 }
-func (s *Server) foreignRetrograde(ctx context.Context, pol policyengine.Engine, f *federation.Runtime, req RetrogradeRequest, now time.Time) (RetrogradeResponse, error) {
+func (s *Server) foreignRetrograde(ctx context.Context, pol policyengine.Engine, f *federation.Runtime, req RetrogradeRequest, now time.Time, audit *accessAudit) (RetrogradeResponse, error) {
 	d, err := pol.DecideDecapsulate(ctx, policyengine.DecapsulateRequest{Principal: req.Principal, AttributeSet: req.AttributeSet, Now: now, Federated: true, OriginDomain: req.Federation.OriginDomain})
+	audit.decided(d, err)
 	if err != nil {
 		return RetrogradeResponse{}, fmt.Errorf("keyserver: foreign policy: %w", err)
 	}
 	if !d.Allow || d.RequireCaptive || len(d.Diagnostics) > 0 {
-		return RetrogradeResponse{}, deniedErr(ctx, "Retrograde", req.Principal.URI, d)
+		return RetrogradeResponse{}, ErrDenied
 	}
 	got, err := f.Recover(ctx, cfar.LeaseContext{OriginDomain: req.Federation.OriginDomain, AttributeSet: req.AttributeSet, LeaseRef: req.LeaseRef}, req.Federation.FLPs, now)
 	if errors.Is(err, cfar.ErrNoUsablePackage) {

@@ -67,10 +67,16 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 		}
 		return policyengine.Decision{Allow: true}, nil
 	}
+	auditBuf := captureAudit(t)
 	got, e := target.srv.Retrograde(t.Context(), req)
 	if e != nil {
 		t.Fatal(e)
 	}
+	audit := auditRecord(t, auditBuf)
+	if audit["outcome"] != "success" || audit["policyDecision"] != "allow" || audit["operation"] != "Retrograde" {
+		t.Fatal(audit)
+	}
+	auditBuf.Reset()
 	a, e := key.MarshalCBOR(pro.Lease.LKAI.NonCaptive.LeaseKey)
 	if e != nil {
 		t.Fatal(e)
@@ -85,6 +91,9 @@ func TestForeignResolutionPolicyAndContext(t *testing.T) {
 	req.Federation.FLPs = nil
 	if _, e = target.srv.Retrograde(t.Context(), req); e != nil {
 		t.Fatal("empty known-package request", e)
+	}
+	if auditRecord(t, auditBuf)["outcome"] != "success" {
+		t.Fatal("cached foreign access missing audit")
 	}
 	for _, d := range []policyengine.Decision{{Allow: false}, {Allow: true, RequireCaptive: true}} {
 		target.engine.decap = func(policyengine.DecapsulateRequest) (policyengine.Decision, error) { return d, nil }

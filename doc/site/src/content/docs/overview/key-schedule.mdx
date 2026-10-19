@@ -9,7 +9,10 @@ sidebar:
 
 The current `disk` key storage plugin uses an embedded SQLite3 database and
 implements the Single Temporal Root Key (STRK) architecture suggested by
-[CKAP](Https://cabespec.org/spec/ckap/).
+[CKAP](https://cabespec.org/spec/ckap/).
+
+The constructions below describe khaled with this plugin. CKAP leaves the
+internal key storage architecture and derivation mechanisms to the implementation.
 
 The `path` configuration setting specifies a directory to hold the database.
 The following files are manifested at the specified path:
@@ -39,12 +42,151 @@ The key store stores the following kinds of object:
   cryptographic key image itself.
 
 - **Key series.** Mostly, a Key Series (as defined in [CABE
-  Architecture](https://cabespec.org/spec/arch/) is derived as needed and does not
+  Architecture](https://cabespec.org/spec/arch/)) is derived as needed and does not
   need to have information about it persisted on disk. However, subepoch rollover
   does require temporary persistence of the advanced subepoch number until the
   root key is rotated and a new root key is created for the domain in question.
   When this happens, this data is deleted as it is no longer needed.
 
-  This table stores a set of (attribute set, subepoch number) mappings for a
+  This table stores a set of (Attribute Set hash, subepoch number) mappings for a
   given domain. The time at which the subepoch number was most recently
   advanced is also stored.
+
+## Key derivation
+
+Each Root Key contains 32 independently generated random bytes (256 bits),
+obtained from Go's `crypto/rand` when a domain is created or its Root Key rotates.
+Set Keys and Lease Keys are derived as needed and are not persisted.
+
+In the formulas below, `HKDF(K, info, L)` means HKDF-SHA256 extract-and-expand
+with input key material `K`, context `info`, and an output of `L` bytes. All
+derivations use a nil salt, equivalent to 32 zero bytes under
+[RFC 5869](https://www.rfc-editor.org/rfc/rfc5869.html#section-2.2).
+`||` denotes byte concatenation, `U64BE` encodes an unsigned integer in eight
+big-endian bytes, and `\x00` denotes one NUL byte.
+
+- `A` is the Attribute Set's core deterministic CBOR encoding, as required by
+  [CABE-ARCH](https://cabespec.org/spec/arch/#serialization). The shared
+  [cabe-go Attribute Set implementation][attrset] validates this representation
+  by decoding, re-encoding and comparing bytes; noncanonical encodings are rejected.
+- `e` is the current subepoch for `A`, initially zero. The disk store indexes
+  its counter by `SHA256(A)`; Set Key derivation uses `A` itself. Advancing the
+  subepoch atomically increments and persists the counter for that Attribute Set.
+- `t` is the Lease mint time in microseconds since the Unix epoch, taken from
+  the server clock. The derivation rejects negative times.
+
+```text
+SetKey = HKDF(RootKey, "khaled/set-key\x00" || A || U64BE(e), 32)
+LeaseKey = HKDF(SetKey, "khaled/lease-key\x00" || U64BE(t), 32)
+```
+
+Both derived keys are 32 bytes (256 bits). The exact context prefixes separate
+Set Key and Lease Key derivation. For a fixed Root Key, Attribute Set, subepoch
+and mint time, the same Lease Key is reproduced.
+
+Implementation: [key schedule][schedule] and [disk key storage][disk].
+
+## Lease Reference authentication
+
+khaled authenticates Lease References with HMAC-SHA256 using a separate
+32-byte MAC key derived from the Root Key current when the reference is wrapped:
+
+```text
+MACKey = HKDF(MACRootKey, "khaled/lease-reference/HMAC-SHA256-128", 32)
+body = v || U64BE(t) || U64BE(r) || U64BE(e)
+tag = HMAC-SHA256(MACKey, U64BE(len(A)) || body || A)[0:16]
+LeaseRef = U64BE(m) || body || tag
+```
+
+`v` is one byte: `0` for a non-captive Lease Reference or `1` for a captive
+Lease Reference. `r` identifies the Root Key used to derive the Lease Key;
+`m` identifies the Root Key used to derive the MAC key. These sequence numbers
+can differ if rotation occurs between Lease Key derivation and reference wrapping.
+`len(A)` is measured in bytes. The tag is the first 16 bytes (128 bits) of the
+32-byte HMAC output; the complete Lease Reference is 49 bytes.
+
+The reference body is authenticated, not encrypted. `A` is supplied as associated
+data rather than embedded in the reference: verification therefore checks the
+binding to the supplied Attribute Set. Lease Key Access Tokens (LKATs) use the
+same wrapper with `v = 2`, append `A` to the body, and use empty associated data.
+The MAC authenticates the reference or token; Key Service policy separately
+authorises its use.
+
+Implementation: [reference framing][refwrapper] and [MAC wrapper][macwrapper].
+
+## Non-captive key access and nonces
+
+khaled returns a non-captive Lease Key as a symmetric `COSE_Key` with algorithm
+`A256GCM` (identifier `3`) and the following 12-byte (96-bit) Base IV:
+
+```text
+BaseIV = HKDF(LeaseKey, "khaled/cose-base-iv", 12)
+```
+
+AES-256-GCM uses a 256-bit key, a 96-bit nonce and a 128-bit authentication tag.
+The [cabe-go Lease manager][leasemgr] allocates the per-Lease Partial IV using an
+increasing counter starting at one, encoded in minimal big-endian form. The
+client's COSE implementation left-pads it to 96 bits and XORs it with the Base IV
+to form the nonce. Nonce uniqueness is required under each encryption key.
+
+khaled supplies the key and Base IV; the [cabe-go codec][codec] constructs the
+`COSE_Encrypt0` Envelope and encrypts the Payload locally, placing the Attribute
+Set and Lease Reference in protected headers as specified by
+[CBES](https://cabespec.org/spec/cbes/).
+
+Implementation on the server: [COSE key construction][cosekey].
+
+## Captive key access
+
+For captive Leases, khaled returns an LKAT instead of the Lease Key. Its
+`AssistedEncapsulate` and `AssistedDecapsulate` operations authenticate the LKAT,
+check current policy and derive the Lease Key to wrap or unwrap the client's
+content encryption key (CEK).
+The Lease Key remains at the server.
+
+The wrapping primitive is AES-256 Key Wrap (RFC 3394), called `A256KW` in COSE
+(identifier `-5`), using the 256-bit Lease Key as the key-encryption key. It uses
+the fixed 64-bit initial value `0xA6A6A6A6A6A6A6A6` and adds eight bytes to the
+wrapped key. Unwrapping rejects a value whose recovered initial value does not
+match. This fixed value is separate from the GCM nonce used for Payload encryption.
+
+cabe-go generates the random 32-byte CEK, obtains its wrapped form from khaled,
+and constructs the `COSE_Encrypt` Envelope. Payload encryption uses AES-256-GCM
+with a fresh random 96-bit IV generated by the client's COSE library. The client
+also performs Payload decryption after obtaining the unwrapped CEK from khaled.
+
+Implementation: [Key Access operations][keyserver], [AES Key Wrap][keywrap] and
+the [cabe-go codec][codec].
+
+## Rotation and lease recovery
+
+Root Key rotation atomically retires the current key, generates its successor
+and clears the domain's subepoch counters. New Leases use the
+new Root Key and subepoch zero until an Attribute Set's counter is advanced.
+The server's `keyStorage.rootRotationInterval` defaults to `24h`; `0s` disables
+scheduled rotation. The Go `keyserver.Server` API also exposes `RotateRootKey`
+and `AdvanceSubEpoch`. See [runtime configuration][runtime].
+
+For a locally issued Lease, Retrograde resolution verifies the reference MAC
+and the caller's policy authorisation before deriving the Lease Key. It recovers
+the referenced Root Key, subepoch and mint time instead of using the current
+values. Retired Root Keys remain stored, so previously issued Leases can still
+be resolved after root rotation or subepoch advancement, including after a
+server restart. The old subepoch counters need not remain in the database:
+their values are carried in authenticated Lease References.
+
+Lease expiry controls reuse for subsequent encryption; it does not erase key
+material or prevent authorised recovery of an older Lease. Recovery requires
+the corresponding Root Keys and the Attribute Set as well as the Lease Reference.
+
+[attrset]: https://github.com/messier-42/cabe-go/blob/145351d4afe785c116fd63964a3e9f98b323c12e/attrset/attrset.go
+[leasemgr]: https://github.com/messier-42/cabe-go/blob/145351d4afe785c116fd63964a3e9f98b323c12e/internal/leasemgr/manager.go#L247-L260
+[codec]: https://github.com/messier-42/cabe-go/blob/145351d4afe785c116fd63964a3e9f98b323c12e/internal/cbescodec/codec.go
+[schedule]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/keyschedule/schedule.go
+[disk]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/plugin/keystorage/disk/domain.go
+[refwrapper]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/refwrapper/refwrapper.go
+[macwrapper]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/wrapper/macwrapper/macwrapper.go
+[cosekey]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/keyserver/cosekey.go
+[keyserver]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/keyserver/ops.go
+[keywrap]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/keywrap/keywrap.go
+[runtime]: https://github.com/messier-42/khaled/blob/d06e5b721279fd65480150df8cdbfa06a409172b/pkg/subsystems/keyserversub/keyserversub.go

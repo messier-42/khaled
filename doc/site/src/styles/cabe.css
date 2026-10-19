@@ -1,45 +1,8 @@
-/* CABE's visual language, adapted to Starlight's documentation layout.
-   Starlight uses white for foreground and black for background in both themes. */
+/* CABE's light visual language, adapted to Starlight's documentation layout. */
 :root {
+  color-scheme: only light;
   --sl-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --sl-font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
-  --sl-color-white: #eef1f5;
-  --sl-color-gray-1: #e1e5eb;
-  --sl-color-gray-2: #c8ced7;
-  --sl-color-gray-3: #a2acb9;
-  --sl-color-gray-4: #6c7786;
-  --sl-color-gray-5: #3a4452;
-  --sl-color-gray-6: #29313c;
-  --sl-color-black: #15191f;
-  --sl-color-accent-low: #1c2e43;
-  --sl-color-accent: #85b9ec;
-  --sl-color-accent-high: #bad8f5;
-  --sl-color-bg-nav: #15191f;
-  --sl-color-bg-sidebar: #1b2028;
-  --sl-color-bg-inline-code: #242c37;
-  --sl-color-hairline-light: #303944;
-  --sl-color-hairline: #3a4452;
-  --sl-color-text: var(--sl-color-gray-2);
-  --sl-color-text-accent: var(--sl-color-accent);
-  --sl-shadow-sm: none;
-  --sl-shadow-md: none;
-  --sl-shadow-lg: 0 12px 40px #0003;
-  --sl-text-body: 1rem;
-  --sl-text-h1: clamp(2rem, 3.2vw, 2.75rem);
-  --sl-text-h2: 1.8125rem;
-  --sl-text-h3: 1.375rem;
-  --sl-text-h4: 1.125rem;
-  --sl-line-height: 1.75;
-  --sl-line-height-headings: 1.25;
-  --sl-nav-height: 4.75rem;
-  --sl-content-width: 47rem;
-  --sl-sidebar-width: 17rem;
-  --cabe-soft: #1b2028;
-  --cabe-blue-soft: #1c2e43;
-  --cabe-blue-line: #496787;
-}
-
-:root[data-theme='light'] {
   --sl-color-white: #181a1d;
   --sl-color-gray-1: #30343a;
   --sl-color-gray-2: #454b54;
@@ -57,13 +20,26 @@
   --sl-color-bg-inline-code: #f0f2f5;
   --sl-color-hairline-light: #e1e5e9;
   --sl-color-hairline: #cbd2da;
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--sl-color-accent);
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: 0 12px 40px #0003;
+  --sl-text-body: 1rem;
+  --sl-text-h1: clamp(2rem, 3.2vw, 2.75rem);
+  --sl-text-h2: 1.8125rem;
+  --sl-text-h3: 1.375rem;
+  --sl-text-h4: 1.125rem;
+  --sl-line-height: 1.75;
+  --sl-line-height-headings: 1.25;
+  --sl-nav-height: 4.75rem;
+  --sl-content-width: 47rem;
+  --sl-sidebar-width: 17rem;
   --cabe-soft: #f7f8fa;
   --cabe-blue-soft: #f1f6fc;
   --cabe-blue-line: #afc5df;
 }
 
-/* Keep the wordmark in sync with the selected theme, including manual overrides. */
-:root[data-theme='dark'] .site-title img { filter: brightness(0) invert(1); }
 .site-title img { height: 3rem; }
 a { text-underline-offset: 0.2em; }
 :focus-visible { outline: 3px solid var(--sl-color-accent); outline-offset: 4px; }
@@ -81,6 +57,7 @@ h3 { letter-spacing: -0.02em; }
 }
 .cabe-project-link:hover { color: var(--sl-color-text-accent); }
 header .social-icons { gap: 1.25rem; }
+header .social-icons::after { display: none; }
 site-search button[data-open-modal] { border-radius: 6px; }
 .sidebar-content a[aria-current='page'] {
   background: var(--cabe-blue-soft);
@@ -174,17 +151,11 @@ site-search button[data-open-modal] { border-radius: 6px; }
   :root { --sl-nav-height: 4.0625rem; }
   .site-title img { height: 2.5rem; }
   [data-has-hero] .hero { padding-top: 1.5rem; }
-  /* Splash pages have no mobile sidebar; keep their theme picker reachable. */
-  [data-has-hero] header .header { gap: 0.75rem; }
-  [data-has-hero] header .title-wrapper { flex: 1; }
-  [data-has-hero] header .right-group { display: flex; }
-  [data-has-hero] header .social-icons { display: none; }
   .khaled-capabilities .card { padding: 1.25rem; }
   /* Starlight's table container scrolls; keep schema names and descriptions readable. */
   .sl-markdown-content :is(th, td) { min-width: 10rem; }
   .sl-markdown-content :is(th, td):last-child { min-width: 20rem; }
 }
 @media print {
-  .site-title img { filter: none !important; }
   .cabe-docs-footer { display: none; }
 }

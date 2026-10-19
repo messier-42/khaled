@@ -8,6 +8,8 @@ import (
 	"github.com/messier-42/khaled/pkg/config/schema"
 )
 
+const auditTestClaim = "team"
+
 func TestAuditConfiguration(t *testing.T) {
 	r := schema.New()
 	if err := RegisterSchema(r); err != nil {
@@ -22,7 +24,7 @@ func TestAuditConfiguration(t *testing.T) {
 		valid bool
 	}{
 		{"empty", map[string]any{}, true},
-		{"all", map[string]any{auditPrincipalClaims: []string{"team"}, "clientIP": true, "fullAttributeSet": true, "policyHashes": true, "diagnostics": true}, true},
+		{"all", map[string]any{auditPrincipalClaims: []string{auditTestClaim}, "clientIP": true, "fullAttributeSet": true, "policyHashes": true, "diagnostics": true}, true},
 		{"not object", true, false},
 		{"not boolean", map[string]any{"clientIP": "true"}, false},
 		{"claims not array", map[string]any{auditPrincipalClaims: true}, false},
@@ -42,7 +44,7 @@ func TestAuditConfiguration(t *testing.T) {
 			if (err == nil) != tc.valid {
 				t.Fatalf("parser validity: %v", err)
 			}
-			if tc.name == "all" && !reflect.DeepEqual(cfg, AuditConfig{PrincipalClaims: []string{"team"}, ClientIP: true, FullAttributeSet: true, PolicyHashes: true, Diagnostics: true}) {
+			if tc.name == "all" && !reflect.DeepEqual(cfg, AuditConfig{PrincipalClaims: []string{auditTestClaim}, ClientIP: true, FullAttributeSet: true, PolicyHashes: true, Diagnostics: true}) {
 				t.Fatal(cfg)
 			}
 		})
@@ -61,8 +63,8 @@ func TestAuditValueNestedSecrets(t *testing.T) {
 			t.Errorf("%s: %v", name, got)
 		}
 	}
-	got := AuditValue("metadata", []any{map[string]any{"password": "secret", "team": "blue"}, []byte("secret"), cyclic}).([]any)
-	if got[0].(map[string]any)["password"] != auditRedacted || got[0].(map[string]any)["team"] != "blue" || got[1] != auditRedacted {
+	got := AuditValue("metadata", []any{map[string]any{"password": "secret", auditTestClaim: "blue"}, []byte("secret"), cyclic}).([]any)
+	if got[0].(map[string]any)["password"] != auditRedacted || got[0].(map[string]any)[auditTestClaim] != "blue" || got[1] != auditRedacted {
 		t.Fatal(got)
 	}
 }
